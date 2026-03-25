@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Build artifacts
+agent/build/
+agent/dist/
+*.spec
+
+# Database
+*.db
+*.sqlite
+
+# Config (contains local machine settings)
+agent/config.json
+
+# Google Sheets credentials
+server/second-broker-*.json
+
+# OS
+.DS_Store
+
+# Archives
+*.zip
+
+# IDE
+.vscode/
+.idea/

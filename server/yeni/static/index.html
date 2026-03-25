@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTF Floor Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">D</div>
+    DTF · Warehouse
+  </div>
+  <div class="header-center">
+    <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+    <button class="nav-tab" data-tab="reports">Reports</button>
+    <button class="nav-tab" data-tab="machines">Machines</button>
+  </div>
+  <div class="header-right">
+    <div class="search-wrap">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="search-input" placeholder="Search files...">
+    </div>
+    <div class="live-badge connected" id="conn-badge">
+      <div class="live-dot"></div>
+      LIVE
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- Search Results Overlay -->
+<div class="search-results" id="search-results"></div>
+
+<!-- Sidebar + Content wrapper -->
+<div class="app-layout">
+
+<!-- Warehouse Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-title">Warehouses</div>
+  <div class="sidebar-list" id="warehouse-list"></div>
+  <div class="sidebar-add">
+    <input type="text" id="new-warehouse-input" placeholder="New warehouse..." class="sidebar-input">
+    <button id="add-warehouse-btn" class="sidebar-add-btn" title="Add">+</button>
+  </div>
+</aside>
+
+<!-- Content area -->
+<div class="content-area">
+
+<div class="main" id="view-dashboard">
+
+  <!-- Top KPI Cards -->
+  <div class="grid-top">
+    <div class="stat-card accent">
+      <div class="stat-label">Active Printing</div>
+      <div class="stat-value" id="kpi-active">0<span class="stat-unit"> jobs</span></div>
+      <div class="stat-sub">Today total: <span id="kpi-today-jobs">0</span> completed</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">In Queue</div>
+      <div class="stat-value" id="kpi-queue">0<span class="stat-unit"> files</span></div>
+      <div class="stat-sub">Waiting to print</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Total Remaining Inches</div>
+      <div class="stat-value" id="kpi-inch">0<span class="stat-unit"> in</span></div>
+      <div class="stat-sub">Across all machines</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Daily Output</div>
+      <div class="stat-value" id="kpi-output">0<span class="stat-unit"> in</span></div>
+      <div class="stat-sub"><span id="kpi-online">0</span> machines online</div>
+    </div>
+  </div>
+
+  <!-- Main Grid: Machines + Queue -->
+  <div class="grid-main">
+
+    <!-- Machines Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Machine Status</span>
+        <div class="filter-bar" id="filter-bar">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="printing">Printing</button>
+          <button class="filter-btn" data-filter="idle">Idle</button>
+        </div>
+      </div>
+      <div class="machines-grid" id="machines-grid"></div>
+    </div>
+
+    <!-- Queue Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Print Queue</span>
+        <span class="panel-sub" id="queue-count">0 files</span>
+      </div>
+      <div class="queue-list" id="queue-list"></div>
+    </div>
+
+  </div>
+
+  <!-- Inch Tracker -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Inches Per Machine</span>
+    </div>
+    <div class="inch-grid" id="inch-grid"></div>
+  </div>
+
+  <!-- PC File Explorer -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">PC File Explorer</span>
+      <div class="pc-tab-bar" id="pc-tab-bar"></div>
+    </div>
+    <div id="pc-detail-bar"></div>
+    <div id="pc-file-table"></div>
+  </div>
+
+  <!-- History -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Print History</span>
+      <span class="panel-sub">Last 20 jobs</span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Machine</th>
+            <th>Inches</th>
+            <th>Completed</th>
+            <th>Duration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Reports View -->
+<div class="main" id="view-reports" style="display:none;">
+
+  <!-- Date Range Picker -->
+  <div class="report-controls">
+    <div class="report-date-group">
+      <label class="report-label">FROM</label>
+      <input type="date" id="report-start" class="report-date-input">
+    </div>
+    <div class="report-date-group">
+      <label class="report-label">TO</label>
+      <input type="date" id="report-end" class="report-date-input">
+    </div>
+    <div class="report-quick-btns">
+      <button class="report-quick-btn" data-range="today">Today</button>
+      <button class="report-quick-btn active" data-range="7d">Last 7 Days</button>
+      <button class="report-quick-btn" data-range="30d">Last 30 Days</button>
+      <button class="report-quick-btn" data-range="month">This Month</button>
+    </div>
+  </div>
+
+  <!-- Report KPI Summary -->
+  <div class="grid-top">
+    <div class="stat-card accent">
+      <div class="stat-label">Total Jobs</div>
+      <div class="stat-value" id="rpt-total-jobs">0<span class="stat-unit"> jobs</span></div>
+      <div class="stat-sub">Completed in range</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Total Inches</div>
+      <div class="stat-value" id="rpt-total-inches">0<span class="stat-unit"> in</span></div>
+      <div class="stat-sub">Across all machines</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Avg Daily Output</div>
+      <div class="stat-value" id="rpt-avg-daily">0<span class="stat-unit"> in</span></div>
+      <div class="stat-sub">Per day average</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Active Machines</div>
+      <div class="stat-value" id="rpt-machines">0<span class="stat-unit"> PCs</span></div>
+      <div class="stat-sub">With completed jobs</div>
+    </div>
+  </div>
+
+  <!-- Per-Machine Breakdown -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Machine Breakdown</span>
+      <span class="panel-sub" id="rpt-range-label">—</span>
+    </div>
+    <div id="rpt-machine-grid" class="rpt-machine-grid"></div>
+  </div>
+
+  <!-- Daily Chart -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Daily Output</span>
+    </div>
+    <div id="rpt-daily-chart" class="rpt-daily-chart"></div>
+  </div>
+
+  <!-- Per-Machine Daily Table -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Detailed Breakdown</span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="history-table" id="rpt-detail-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Machine</th>
+            <th>Jobs</th>
+            <th>Inches</th>
+            <th>First Print</th>
+          </tr>
+        </thead>
+        <tbody id="rpt-detail-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Machines Management View -->
+<div class="main" id="view-machines" style="display:none;">
+
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Manage Machines</span>
+      <span class="panel-sub">Assign warehouses and manage machines</span>
+    </div>
+    <div id="machines-manage-list"></div>
+  </div>
+
+</div>
+
+</div><!-- /content-area -->
+</div><!-- /app-layout -->
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
