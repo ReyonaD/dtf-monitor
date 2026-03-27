@@ -652,9 +652,11 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     document.getElementById('view-dashboard').style.display = view === 'dashboard' ? '' : 'none';
     document.getElementById('view-reports').style.display = view === 'reports' ? '' : 'none';
     document.getElementById('view-machines').style.display = view === 'machines' ? '' : 'none';
+    document.getElementById('view-customers').style.display = view === 'customers' ? '' : 'none';
 
     if (view === 'reports') loadReport();
     if (view === 'machines') renderMachinesTab();
+    if (view === 'customers') { loadCustomers(); renderCustomersTab(); }
   });
 });
 
@@ -943,6 +945,109 @@ document.getElementById('machines-manage-list').addEventListener('click', async 
 let customerList = [];
 let selectedCustomerId = null;
 
+function renderCustomersTab() {
+  const container = document.getElementById('customers-manage-list');
+  if (!container) return;
+
+  if (customerList.length === 0) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text3);">No customers yet.</div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Balance</th>
+          <th>Pending Files</th>
+          <th>Add Credit</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${customerList.map(c => `<tr>
+          <td style="font-weight:600;">${esc(c.name)}</td>
+          <td style="font-family:var(--mono);font-size:11px;">${esc(c.email)}</td>
+          <td style="font-weight:700;">${c.balance.toFixed(1)} in</td>
+          <td>${c.pending_file_count || 0}</td>
+          <td>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <input type="number" class="cust-credit-input" data-customer-id="${c.id}" placeholder="+/-" step="0.1" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;font-family:var(--mono);outline:none;">
+              <button class="action-btn cust-credit-btn" data-customer-id="${c.id}">Apply</button>
+            </div>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;">
+              <button class="action-btn cust-detail-btn" data-customer-id="${c.id}" title="Details">Details</button>
+              <button class="manage-delete-btn cust-delete-btn" data-customer-id="${c.id}" data-customer-name="${esc(c.name)}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// Customers tab event delegation
+document.getElementById('customers-manage-list')?.addEventListener('click', async (e) => {
+  // Credit apply
+  const creditBtn = e.target.closest('.cust-credit-btn');
+  if (creditBtn) {
+    const custId = creditBtn.dataset.customerId;
+    const input = document.querySelector(`.cust-credit-input[data-customer-id="${custId}"]`);
+    const amount = parseFloat(input.value);
+    if (isNaN(amount) || amount === 0) return;
+    try {
+      await fetch(`/api/admin/customers/${custId}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, reason: 'manual_adjustment' }),
+      });
+      input.value = '';
+      await loadCustomers();
+      renderCustomersTab();
+    } catch (err) {
+      alert('Failed to add credit: ' + err.message);
+    }
+    return;
+  }
+
+  // Details
+  const detailBtn = e.target.closest('.cust-detail-btn');
+  if (detailBtn) {
+    openCustomerDetail(detailBtn.dataset.customerId);
+    return;
+  }
+
+  // Delete (double confirmation)
+  const deleteBtn = e.target.closest('.cust-delete-btn');
+  if (deleteBtn) {
+    const custId = deleteBtn.dataset.customerId;
+    const name = deleteBtn.dataset.customerName;
+    if (!confirm(`Delete customer "${name}"?\n\nThis will deactivate the customer and they will no longer be able to log in.`)) return;
+    if (!confirm(`Are you absolutely sure?\n\nAll files and credit history for "${name}" will become inaccessible. This cannot be undone.`)) return;
+    try {
+      const resp = await fetch(`/api/admin/customers/${custId}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error('Delete failed');
+      selectedCustomerId = null;
+      await loadCustomers();
+      renderCustomersTab();
+    } catch (err) {
+      alert('Failed to delete customer: ' + err.message);
+    }
+    return;
+  }
+});
+
+// New Customer button in Customers tab
+document.getElementById('add-customer-btn-tab')?.addEventListener('click', () => {
+  document.getElementById('customer-modal').style.display = 'flex';
+});
+
 async function loadCustomers() {
   try {
     const resp = await fetch('/api/admin/customers');
@@ -1135,7 +1240,9 @@ async function openCustomerDetail(customerId) {
             </tbody>
           </table>
         </div>
-      </div>`;
+      </div>
+
+      `;
     modal.style.display = 'flex';
 
     // Credit button handler
@@ -1212,7 +1319,8 @@ document.getElementById('customer-form')?.addEventListener('submit', async (e) =
       throw new Error(err.error || 'Failed');
     }
     closeCustomerModal();
-    loadCustomers();
+    await loadCustomers();
+    renderCustomersTab();
   } catch (err) {
     alert('Failed to create customer: ' + err.message);
   }
