@@ -257,8 +257,9 @@ def sync_files_for_machine(machine_id: str, files: list[dict]):
     incoming_paths = {f["filepath"] for f in files}
 
     # Remove active jobs for files that no longer exist on the PC
+    # But never remove customer-assigned jobs (they have no local filepath)
     for filepath, job in active_map.items():
-        if filepath not in incoming_paths:
+        if filepath not in incoming_paths and filepath != "":
             conn.execute("""
                 UPDATE print_jobs SET status = 'removed', completed_at = datetime('now')
                 WHERE id = ?
