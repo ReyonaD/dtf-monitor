@@ -7,6 +7,7 @@ STATUS, MAKINA (machine), and MAKINACI (operator) columns.
 import re
 import os
 import logging
+from typing import Optional
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -37,7 +38,7 @@ def _get_client():
     return gspread.authorize(creds)
 
 
-def extract_order_code(filename: str) -> str | None:
+def extract_order_code(filename: str) -> Optional[str]:
     """
     Extract order code from filename.
     The code is the letters+numbers portion right before '(N x)'.

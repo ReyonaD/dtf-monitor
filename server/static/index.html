@@ -46,6 +46,14 @@
     <input type="text" id="new-warehouse-input" placeholder="New warehouse..." class="sidebar-input">
     <button id="add-warehouse-btn" class="sidebar-add-btn" title="Add">+</button>
   </div>
+
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-title">Customers</div>
+  <div class="sidebar-list" id="customer-list"></div>
+  <div class="sidebar-add">
+    <button id="add-customer-btn" class="sidebar-add-btn" style="width:100%" title="Add Customer">+ New Customer</button>
+  </div>
 </aside>
 
 <!-- Content area -->
@@ -120,6 +128,30 @@
     </div>
     <div id="pc-detail-bar"></div>
     <div id="pc-file-table"></div>
+  </div>
+
+  <!-- Customer Files -->
+  <div class="panel section-gap">
+    <div class="panel-header">
+      <span class="panel-title">Customer Files</span>
+      <span class="panel-sub" id="cust-files-count">0 files</span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Filename</th>
+            <th>Inches</th>
+            <th>Copies</th>
+            <th>Status</th>
+            <th>Uploaded</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="cust-files-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- History -->
@@ -247,6 +279,34 @@
 
 </div><!-- /content-area -->
 </div><!-- /app-layout -->
+
+<!-- Add Customer Modal -->
+<div class="modal-overlay" id="customer-modal" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title">New Customer</div>
+    <form id="customer-form">
+      <input type="text" name="name" placeholder="Customer name" class="modal-input" required>
+      <input type="email" name="email" placeholder="Email" class="modal-input" required>
+      <input type="password" name="password" placeholder="Password" class="modal-input" required>
+      <input type="number" name="monthly_credit_inches" placeholder="Monthly credit (inches)" class="modal-input" step="0.1" value="0">
+      <div class="modal-actions">
+        <button type="button" class="modal-btn cancel" onclick="closeCustomerModal()">Cancel</button>
+        <button type="submit" class="modal-btn confirm">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Customer Detail Modal -->
+<div class="modal-overlay" id="customer-detail-modal" style="display:none;">
+  <div class="modal-box" style="max-width:90vw;width:900px;max-height:90vh;">
+    <div class="modal-title" id="cust-detail-title">Customer</div>
+    <div id="cust-detail-content"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn cancel" onclick="closeCustomerDetailModal()">Close</button>
+    </div>
+  </div>
+</div>
 
 <script src="/static/dashboard.js"></script>
 </body>

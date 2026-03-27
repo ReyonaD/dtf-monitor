@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import uuid
+import hashlib
+import secrets
 from datetime import datetime, date
 from typing import Optional
 
@@ -54,6 +56,51 @@ def init_db():
         CREATE TABLE IF NOT EXISTS warehouses (
             name TEXT PRIMARY KEY
         );
+
+        CREATE TABLE IF NOT EXISTS customers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            password_salt TEXT NOT NULL,
+            monthly_credit_inches REAL DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS credit_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id TEXT NOT NULL,
+            amount REAL NOT NULL,
+            balance_after REAL NOT NULL,
+            reason TEXT NOT NULL,
+            reference_id TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (customer_id) REFERENCES customers(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ledger_customer ON credit_ledger(customer_id);
+
+        CREATE TABLE IF NOT EXISTS customer_files (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            file_size INTEGER DEFAULT 0,
+            width_px INTEGER DEFAULT 0,
+            height_px INTEGER DEFAULT 0,
+            dpi_x REAL DEFAULT 0,
+            dpi_y REAL DEFAULT 0,
+            print_inches REAL DEFAULT 0,
+            copies INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'uploaded',
+            print_job_id INTEGER,
+            uploaded_at TEXT DEFAULT (datetime('now')),
+            completed_at TEXT,
+            FOREIGN KEY (customer_id) REFERENCES customers(id),
+            FOREIGN KEY (print_job_id) REFERENCES print_jobs(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cfiles_customer ON customer_files(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_cfiles_status ON customer_files(status);
     """)
     # Migration: add copies column if missing
     try:
@@ -72,6 +119,13 @@ def init_db():
     # Migration: add warehouse column to machines if missing
     try:
         conn.execute("ALTER TABLE machines ADD COLUMN warehouse TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Migration: add customer_file_id to print_jobs
+    try:
+        conn.execute("ALTER TABLE print_jobs ADD COLUMN customer_file_id TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
@@ -478,6 +532,259 @@ def get_daily_stats(for_date: Optional[str] = None, warehouse: Optional[str] = N
         """, (for_date,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── Customer operations ──
+
+def _hash_password(password: str, salt: str = None) -> tuple[str, str]:
+    if salt is None:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((salt + password).encode()).hexdigest()
+    return hashed, salt
+
+
+def create_customer(name: str, email: str, password: str, monthly_credit_inches: float = 0) -> dict:
+    conn = get_connection()
+    customer_id = str(uuid.uuid4())[:8]
+    password_hash, salt = _hash_password(password)
+    conn.execute("""
+        INSERT INTO customers (id, name, email, password_hash, password_salt, monthly_credit_inches)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (customer_id, name, email, password_hash, salt, monthly_credit_inches))
+    conn.commit()
+    customer = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    conn.close()
+    return dict(customer)
+
+
+def verify_customer_password(email: str, password: str) -> Optional[dict]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM customers WHERE email = ? AND is_active = 1", (email,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    customer = dict(row)
+    hashed, _ = _hash_password(password, customer["password_salt"])
+    if hashed == customer["password_hash"]:
+        return customer
+    return None
+
+
+def get_customer_by_id(customer_id: str) -> Optional[dict]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_customers() -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM customers WHERE is_active = 1 ORDER BY name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_customer(customer_id: str, name: str = None, email: str = None,
+                    password: str = None, monthly_credit_inches: float = None) -> Optional[dict]:
+    conn = get_connection()
+    updates = []
+    params = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if email is not None:
+        updates.append("email = ?")
+        params.append(email)
+    if password is not None:
+        hashed, salt = _hash_password(password)
+        updates.append("password_hash = ?")
+        params.append(hashed)
+        updates.append("password_salt = ?")
+        params.append(salt)
+    if monthly_credit_inches is not None:
+        updates.append("monthly_credit_inches = ?")
+        params.append(monthly_credit_inches)
+    if not updates:
+        conn.close()
+        return get_customer_by_id(customer_id)
+    params.append(customer_id)
+    conn.execute(f"UPDATE customers SET {', '.join(updates)} WHERE id = ?", params)
+    conn.commit()
+    row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def deactivate_customer(customer_id: str):
+    conn = get_connection()
+    conn.execute("UPDATE customers SET is_active = 0 WHERE id = ?", (customer_id,))
+    conn.commit()
+    conn.close()
+
+
+# ── Credit operations ──
+
+def get_customer_balance(customer_id: str) -> float:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) as balance FROM credit_ledger WHERE customer_id = ?",
+        (customer_id,)
+    ).fetchone()
+    conn.close()
+    return row["balance"] if row else 0.0
+
+
+def add_credit(customer_id: str, amount: float, reason: str, reference_id: str = None) -> dict:
+    conn = get_connection()
+    current = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) as balance FROM credit_ledger WHERE customer_id = ?",
+        (customer_id,)
+    ).fetchone()["balance"]
+    balance_after = current + amount
+    conn.execute("""
+        INSERT INTO credit_ledger (customer_id, amount, balance_after, reason, reference_id)
+        VALUES (?, ?, ?, ?, ?)
+    """, (customer_id, amount, balance_after, reason, reference_id))
+    conn.commit()
+    conn.close()
+    return {"amount": amount, "balance_after": balance_after, "reason": reason}
+
+
+def deduct_credit(customer_id: str, inches: float, reference_id: str = None) -> dict:
+    return add_credit(customer_id, -inches, "print_deduction", reference_id)
+
+
+def get_credit_history(customer_id: str, limit: int = 50) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT * FROM credit_ledger WHERE customer_id = ?
+        ORDER BY created_at DESC LIMIT ?
+    """, (customer_id, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ── Customer file operations ──
+
+def create_customer_file(customer_id: str, original_filename: str, stored_filename: str,
+                         file_size: int, width_px: int, height_px: int,
+                         dpi_x: float, dpi_y: float, print_inches: float, copies: int = 1) -> dict:
+    conn = get_connection()
+    file_id = str(uuid.uuid4())[:8]
+    conn.execute("""
+        INSERT INTO customer_files (id, customer_id, original_filename, stored_filename,
+            file_size, width_px, height_px, dpi_x, dpi_y, print_inches, copies)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (file_id, customer_id, original_filename, stored_filename,
+          file_size, width_px, height_px, dpi_x, dpi_y, print_inches, copies))
+    conn.commit()
+    row = conn.execute("SELECT * FROM customer_files WHERE id = ?", (file_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def get_customer_files(customer_id: str = None, status: str = None) -> list[dict]:
+    conn = get_connection()
+    query = "SELECT cf.*, c.name as customer_name FROM customer_files cf JOIN customers c ON cf.customer_id = c.id WHERE 1=1"
+    params = []
+    if customer_id:
+        query += " AND cf.customer_id = ?"
+        params.append(customer_id)
+    if status:
+        query += " AND cf.status = ?"
+        params.append(status)
+    query += " ORDER BY cf.uploaded_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_customer_file_by_id(file_id: str) -> Optional[dict]:
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT cf.*, c.name as customer_name FROM customer_files cf
+        JOIN customers c ON cf.customer_id = c.id
+        WHERE cf.id = ?
+    """, (file_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_customer_file(file_id: str, customer_id: str) -> bool:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM customer_files WHERE id = ? AND customer_id = ? AND status = 'uploaded'",
+        (file_id, customer_id)
+    )
+    conn.commit()
+    deleted = result.rowcount > 0
+    conn.close()
+    return deleted
+
+
+def assign_customer_file_to_machine(file_id: str, machine_id: str) -> Optional[dict]:
+    conn = get_connection()
+    cf = conn.execute("SELECT * FROM customer_files WHERE id = ?", (file_id,)).fetchone()
+    if not cf:
+        conn.close()
+        return None
+    cf = dict(cf)
+    # Create a print_job linked to this customer file
+    conn.execute("""
+        INSERT INTO print_jobs (machine_id, filename, filepath, width_px, height_px,
+            dpi_x, dpi_y, print_inches, copies, status, customer_file_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)
+    """, (machine_id, cf["original_filename"], "", cf["width_px"], cf["height_px"],
+          cf["dpi_x"], cf["dpi_y"], cf["print_inches"], cf["copies"], file_id))
+    job_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.execute(
+        "UPDATE customer_files SET status = 'queued', print_job_id = ? WHERE id = ?",
+        (job_id, file_id)
+    )
+    conn.commit()
+    conn.close()
+    return {"job_id": job_id, "file_id": file_id}
+
+
+def update_customer_file_status(file_id: str, status: str):
+    conn = get_connection()
+    if status == "completed":
+        conn.execute(
+            "UPDATE customer_files SET status = ?, completed_at = datetime('now') WHERE id = ?",
+            (status, file_id)
+        )
+    else:
+        conn.execute("UPDATE customer_files SET status = ? WHERE id = ?", (status, file_id))
+    conn.commit()
+    conn.close()
+
+
+def update_customer_file_copies(file_id: str, copies: int):
+    conn = get_connection()
+    conn.execute("UPDATE customer_files SET copies = ? WHERE id = ?", (copies, file_id))
+    conn.commit()
+    conn.close()
+
+
+def get_pending_inches(customer_id: str) -> float:
+    """Get total inches of files that are uploaded/queued/printing (not yet completed)."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT COALESCE(SUM(print_inches * copies), 0) as total
+        FROM customer_files
+        WHERE customer_id = ? AND status IN ('uploaded', 'queued', 'printing')
+    """, (customer_id,)).fetchone()
+    conn.close()
+    return row["total"] if row else 0.0
+
+
+def get_customer_file_by_job_id(job_id: int) -> Optional[dict]:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM customer_files WHERE print_job_id = ?", (job_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def get_report(start_date: str, end_date: str, warehouse: Optional[str] = None):

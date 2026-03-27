@@ -38,6 +38,11 @@ function connectWS() {
       applyWarehouseFilter();
       renderAll();
       loadHistory();
+      renderCustomerFiles();
+    }
+    if (data.type === 'customer_file_uploaded') {
+      loadCustomers();
+      renderCustomerFiles();
     }
   };
 
@@ -933,8 +938,298 @@ document.getElementById('machines-manage-list').addEventListener('click', async 
 });
 
 
+// ── Customer Management ──
+
+let customerList = [];
+let selectedCustomerId = null;
+
+async function loadCustomers() {
+  try {
+    const resp = await fetch('/api/admin/customers');
+    customerList = await resp.json();
+    renderCustomerSidebar();
+    renderCustomerFiles();
+  } catch (err) {
+    console.error('Failed to load customers:', err);
+  }
+}
+
+function renderCustomerSidebar() {
+  const list = document.getElementById('customer-list');
+  if (!list) return;
+  if (customerList.length === 0) {
+    list.innerHTML = '<div class="sidebar-empty">No customers yet</div>';
+    return;
+  }
+  list.innerHTML = customerList.map(c => {
+    const badge = c.pending_file_count > 0
+      ? `<span class="sidebar-badge">${c.pending_file_count}</span>`
+      : '';
+    return `
+    <div class="sidebar-item ${selectedCustomerId === c.id ? 'active' : ''}" data-customer-id="${c.id}">
+      <div class="sidebar-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.name)} ${badge}</div>
+        <div style="font-size:11px;color:#6b6b80;">${c.balance.toFixed(1)} in</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Click handlers
+  list.querySelectorAll('.sidebar-item').forEach(item => {
+    item.addEventListener('click', () => {
+      selectedCustomerId = item.dataset.customerId;
+      renderCustomerSidebar();
+      renderCustomerFiles();
+      openCustomerDetail(selectedCustomerId);
+    });
+  });
+}
+
+async function renderCustomerFiles() {
+  const body = document.getElementById('cust-files-body');
+  const countEl = document.getElementById('cust-files-count');
+  if (!body) return;
+
+  try {
+    const url = selectedCustomerId
+      ? `/api/admin/customer-files?customer_id=${selectedCustomerId}`
+      : '/api/admin/customer-files';
+    const resp = await fetch(url);
+    const files = await resp.json();
+    countEl.textContent = `${files.length} files`;
+
+    if (files.length === 0) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b6b80;padding:24px;">No customer files</td></tr>';
+      return;
+    }
+
+    body.innerHTML = files.map(f => {
+      const statusClass = {
+        'uploaded': 'status-idle',
+        'queued': 'status-idle',
+        'printing': 'status-printing',
+        'completed': 'status-completed',
+      }[f.status] || '';
+
+      const uploaded = f.uploaded_at ? new Date(f.uploaded_at + 'Z').toLocaleString('en-US', {
+        month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false
+      }) : '—';
+
+      // Build action buttons
+      let actions = `<a href="/api/admin/customer-files/${f.id}/download" class="action-btn" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>`;
+      if (f.status === 'uploaded') {
+        actions += `
+          <select class="assign-select" data-file-id="${f.id}" title="Assign to machine">
+            <option value="">Assign...</option>
+            ${lastState.map(m => `<option value="${m.machine.id}">${esc(m.machine.name)}</option>`).join('')}
+          </select>`;
+      }
+
+      return `<tr>
+        <td>${esc(f.customer_name || '')}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">${esc(f.original_filename)}</td>
+        <td>${f.print_inches.toFixed(1)}</td>
+        <td>${f.copies}</td>
+        <td><span class="status-badge ${statusClass}">${f.status.toUpperCase()}</span></td>
+        <td>${uploaded}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+
+    // Assign handler
+    body.querySelectorAll('.assign-select').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        const fileId = e.target.dataset.fileId;
+        const machineId = e.target.value;
+        if (!machineId) return;
+        try {
+          const resp = await fetch(`/api/admin/customer-files/${fileId}/assign`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machine_id: machineId }),
+          });
+          const data = await resp.json();
+          if (data.warning) alert(data.warning);
+          renderCustomerFiles();
+        } catch (err) {
+          alert('Assign failed: ' + err.message);
+        }
+      });
+    });
+  } catch (err) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;">Failed to load</td></tr>';
+  }
+}
+
+async function openCustomerDetail(customerId) {
+  const modal = document.getElementById('customer-detail-modal');
+  const title = document.getElementById('cust-detail-title');
+  const content = document.getElementById('cust-detail-content');
+
+  try {
+    const resp = await fetch(`/api/admin/customers/${customerId}`);
+    const c = await resp.json();
+    title.textContent = c.name;
+
+    // Separate files by status
+    const pendingFiles = (c.files || []).filter(f => f.status !== 'completed');
+    const completedFiles = (c.files || []).filter(f => f.status === 'completed');
+
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:12px;margin-bottom:16px;">
+        <div class="detail-card"><div class="detail-label">Email</div><div class="detail-value" style="font-size:12px;">${esc(c.email)}</div></div>
+        <div class="detail-card"><div class="detail-label">Balance</div><div class="detail-value">${c.balance.toFixed(1)} in</div></div>
+        <div class="detail-card"><div class="detail-label">Monthly</div><div class="detail-value">${c.monthly_credit_inches} in</div></div>
+        <div class="detail-card"><div class="detail-label">Pending Files</div><div class="detail-value">${pendingFiles.length}</div></div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <strong style="font-size:13px;">Files (${pendingFiles.length} pending, ${completedFiles.length} completed)</strong>
+        <div style="max-height:250px;overflow-y:auto;margin-top:6px;">
+          <table class="history-table" style="font-size:12px;">
+            <thead><tr><th>Filename</th><th>Inches</th><th>Copies</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${(c.files || []).map(f => {
+                const sc = {'uploaded':'status-idle','queued':'status-idle','printing':'status-printing','completed':'status-completed'}[f.status] || '';
+                let actions = `<a href="/api/admin/customer-files/${f.id}/download" class="action-btn" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>`;
+                if (f.status === 'uploaded') {
+                  actions += ` <select class="assign-select-modal" data-file-id="${f.id}" style="font-size:11px;padding:2px 4px;background:#1a1a24;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#e2e2e8;">
+                    <option value="">Assign...</option>
+                    ${lastState.map(m => `<option value="${m.machine.id}">${esc(m.machine.name)}</option>`).join('')}
+                  </select>`;
+                }
+                return `<tr>
+                  <td style="font-family:'JetBrains Mono',monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(f.original_filename)}</td>
+                  <td>${f.print_inches.toFixed(1)}</td>
+                  <td>${f.copies}</td>
+                  <td><span class="status-badge ${sc}">${f.status.toUpperCase()}</span></td>
+                  <td>${actions}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <strong style="font-size:13px;">Add/Remove Credit</strong>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <input type="number" id="credit-amount" placeholder="Amount (+ or -)" class="modal-input" style="flex:1;">
+          <button class="modal-btn confirm" id="credit-btn">Apply</button>
+        </div>
+      </div>
+      <div>
+        <strong style="font-size:13px;">Credit History</strong>
+        <div style="max-height:200px;overflow-y:auto;margin-top:6px;">
+          <table class="history-table" style="font-size:12px;">
+            <thead><tr><th>Date</th><th>Amount</th><th>Balance</th><th>Reason</th></tr></thead>
+            <tbody>
+              ${(c.credit_history || []).map(h => `<tr>
+                <td>${new Date(h.created_at + 'Z').toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</td>
+                <td style="color:${h.amount >= 0 ? '#3DCF82' : '#FF4D4D'}">${h.amount >= 0 ? '+' : ''}${h.amount.toFixed(1)}</td>
+                <td>${h.balance_after.toFixed(1)}</td>
+                <td>${esc(h.reason)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+
+    // Credit button handler
+    document.getElementById('credit-btn').addEventListener('click', async () => {
+      const amount = parseFloat(document.getElementById('credit-amount').value);
+      if (isNaN(amount) || amount === 0) return;
+      await fetch(`/api/admin/customers/${customerId}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, reason: 'manual_adjustment' }),
+      });
+      openCustomerDetail(customerId);
+      loadCustomers();
+    });
+
+    // Assign handlers inside modal
+    content.querySelectorAll('.assign-select-modal').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        const fileId = e.target.dataset.fileId;
+        const machineId = e.target.value;
+        if (!machineId) return;
+        try {
+          const resp = await fetch(`/api/admin/customer-files/${fileId}/assign`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machine_id: machineId }),
+          });
+          const data = await resp.json();
+          if (data.warning) alert(data.warning);
+          openCustomerDetail(customerId);
+          loadCustomers();
+          renderCustomerFiles();
+        } catch (err) {
+          alert('Assign failed: ' + err.message);
+        }
+      });
+    });
+  } catch (err) {
+    alert('Failed to load customer: ' + err.message);
+  }
+}
+
+function closeCustomerDetailModal() {
+  document.getElementById('customer-detail-modal').style.display = 'none';
+}
+
+// Add Customer Modal
+document.getElementById('add-customer-btn')?.addEventListener('click', () => {
+  document.getElementById('customer-modal').style.display = 'flex';
+});
+
+function closeCustomerModal() {
+  document.getElementById('customer-modal').style.display = 'none';
+  document.getElementById('customer-form').reset();
+}
+
+document.getElementById('customer-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    name: form.name.value,
+    email: form.email.value,
+    password: form.password.value,
+    monthly_credit_inches: parseFloat(form.monthly_credit_inches.value) || 0,
+  };
+  try {
+    const resp = await fetch('/api/admin/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || 'Failed');
+    }
+    closeCustomerModal();
+    loadCustomers();
+  } catch (err) {
+    alert('Failed to create customer: ' + err.message);
+  }
+});
+
+// Close modals on overlay click
+document.getElementById('customer-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeCustomerModal();
+});
+document.getElementById('customer-detail-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeCustomerDetailModal();
+});
+
 // ── Init ──
 loadWarehouses().then(() => {
   renderSidebar();
   connectWS();
+  loadCustomers();
 });

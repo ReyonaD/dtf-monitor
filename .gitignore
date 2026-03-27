@@ -24,6 +24,9 @@ server/second-broker-*.json
 # Archives
 *.zip
 
+# Uploaded customer files
+server/uploads/
+
 # IDE
 .vscode/
 .idea/

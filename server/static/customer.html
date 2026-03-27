@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTF Monitor - Customer Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  /* Customer portal specific styles */
+  .customer-app { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+  .customer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .customer-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; }
+  .customer-logo .logo-mark {
+    width:36px; height:36px; background:linear-gradient(135deg,#a78bfa,#7c3aed);
+    border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:18px; color:#fff;
+  }
+  .customer-user { display:flex; align-items:center; gap:12px; }
+  .customer-name { font-size:14px; font-weight:600; }
+  .customer-email { font-size:12px; color:var(--muted); }
+  .logout-btn {
+    padding:8px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08);
+    border-radius:8px; color:var(--text); font-size:13px; cursor:pointer; transition:background 0.15s;
+  }
+  .logout-btn:hover { background:rgba(255,255,255,0.1); }
+
+  .credit-banner {
+    background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(124,58,237,0.1));
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 16px; padding: 24px; margin-bottom: 24px; text-align: center;
+  }
+  .credit-label { font-size:13px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
+  .credit-value { font-size:48px; font-weight:900; font-family:var(--mono); }
+  .credit-unit { font-size:18px; font-weight:600; color:var(--muted); }
+  .credit-available { font-size:15px; margin-top:8px; color:#E8FF47; }
+  .credit-sub { font-size:13px; color:var(--muted); margin-top:4px; }
+
+  .upload-zone {
+    border:2px dashed rgba(255,255,255,0.1); border-radius:12px; padding:40px;
+    text-align:center; margin-bottom:24px; transition: border-color 0.2s, background 0.2s;
+    cursor: pointer;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color:var(--accent); background:rgba(232,255,71,0.03);
+  }
+  .upload-zone-icon { font-size:32px; margin-bottom:8px; color:var(--muted); }
+  .upload-zone-text { font-size:14px; color:var(--muted); }
+  .upload-zone-text strong { color:var(--accent); }
+  .upload-zone input[type="file"] { display:none; }
+
+  .upload-progress {
+    display:none; padding:12px; background:var(--surface); border-radius:8px;
+    margin-bottom:16px; font-size:13px;
+  }
+
+  .file-grid { display:flex; flex-direction:column; gap:8px; }
+  .file-card {
+    background:var(--surface); border:1px solid rgba(255,255,255,0.06);
+    border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:14px;
+  }
+  .file-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
+  .file-icon.uploaded { background:rgba(74,158,255,0.15); color:#4A9EFF; }
+  .file-icon.queued { background:rgba(255,122,53,0.15); color:#FF7A35; }
+  .file-icon.printing { background:rgba(232,255,71,0.15); color:#E8FF47; }
+  .file-icon.completed { background:rgba(61,207,130,0.15); color:#3DCF82; }
+  .file-info { flex:1; min-width:0; }
+  .file-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:var(--mono); }
+  .file-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .file-status { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; padding:4px 10px; border-radius:6px; }
+  .file-delete {
+    background:none; border:none; color:#FF4D4D; cursor:pointer; font-size:16px;
+    padding:4px 8px; opacity:0.6; transition:opacity 0.15s;
+  }
+  .file-delete:hover { opacity:1; }
+
+  /* Language toggle */
+  .lang-toggle {
+    display:flex; gap:4px; background:rgba(255,255,255,0.04); border-radius:6px; padding:2px;
+  }
+  .lang-btn {
+    padding:4px 10px; border:none; border-radius:5px; font-size:12px; font-weight:600;
+    cursor:pointer; transition: background 0.15s, color 0.15s;
+    background:transparent; color:var(--muted);
+  }
+  .lang-btn.active { background:rgba(255,255,255,0.1); color:var(--text); }
+
+  /* Login page */
+  .login-wrap {
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+  }
+  .login-box {
+    background:var(--surface); border:1px solid rgba(255,255,255,0.06);
+    border-radius:16px; padding:48px 40px; width:380px; text-align:center;
+  }
+  .login-logo {
+    width:48px; height:48px; background:linear-gradient(135deg,#a78bfa,#7c3aed);
+    border-radius:12px; display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:22px; color:#fff; margin:0 auto 20px;
+  }
+  .login-title { font-size:20px; font-weight:700; margin-bottom:6px; }
+  .login-sub { font-size:13px; color:var(--muted); margin-bottom:32px; }
+  .login-input {
+    width:100%; padding:14px 16px; background:var(--bg); border:1px solid rgba(255,255,255,0.08);
+    border-radius:10px; color:var(--text); font-size:15px; font-family:var(--sans);
+    outline:none; margin-bottom:10px; transition:border-color 0.2s;
+  }
+  .login-input:focus { border-color:#7c3aed; }
+  .login-input::placeholder { color:var(--muted); }
+  .login-btn {
+    width:100%; padding:14px; background:linear-gradient(135deg,#7c3aed,#6d28d9);
+    border:none; border-radius:10px; color:#fff; font-size:15px; font-weight:600;
+    font-family:var(--sans); cursor:pointer; margin-top:6px; transition:opacity 0.2s;
+  }
+  .login-btn:hover { opacity:0.9; }
+  .login-error { color:#ef4444; font-size:13px; margin-top:12px; display:none; }
+  .login-error.show { display:block; }
+
+  .section-title { font-size:16px; font-weight:700; margin-bottom:16px; }
+</style>
+</head>
+<body>
+
+<!-- Login View -->
+<div id="login-view" class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">D</div>
+    <div class="login-title" data-i18n="portal_title">Customer Portal</div>
+    <div class="login-sub" data-i18n="portal_sub">Sign in to your account</div>
+    <form id="login-form">
+      <input type="email" name="email" class="login-input" placeholder="Email" required>
+      <input type="password" name="password" class="login-input" placeholder="Password" required>
+      <button type="submit" class="login-btn" data-i18n="login_btn">Sign In</button>
+      <div class="login-error" id="login-error" data-i18n="login_error">Invalid email or password</div>
+    </form>
+  </div>
+</div>
+
+<!-- Portal View -->
+<div id="portal-view" style="display:none;">
+  <div class="customer-app">
+
+    <div class="customer-header">
+      <div class="customer-logo">
+        <div class="logo-mark">D</div>
+        <span data-i18n="portal_title">Customer Portal</span>
+      </div>
+      <div class="customer-user">
+        <div>
+          <div class="customer-name" id="user-name"></div>
+          <div class="customer-email" id="user-email"></div>
+        </div>
+        <div class="lang-toggle">
+          <button class="lang-btn active" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="tr">TR</button>
+        </div>
+        <button class="logout-btn" id="logout-btn" data-i18n="logout">Logout</button>
+      </div>
+    </div>
+
+    <!-- Credit Banner -->
+    <div class="credit-banner">
+      <div class="credit-label" data-i18n="remaining_credit">Remaining Credit</div>
+      <div class="credit-value"><span id="credit-balance">0</span><span class="credit-unit"> in</span></div>
+      <div class="credit-available" id="credit-available-row" style="display:none;">
+        <span data-i18n="available">Available</span>: <span id="credit-available" style="font-weight:700;">0</span> in
+        <span style="color:var(--muted);margin-left:4px;">(<span data-i18n="pending">pending</span>: <span id="credit-pending">0</span> in)</span>
+      </div>
+      <div class="credit-sub"><span data-i18n="monthly_allocation">Monthly allocation</span>: <span id="credit-monthly">0</span> in</div>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="section-title" data-i18n="upload_files">Upload Files</div>
+    <div class="upload-zone" id="upload-zone">
+      <div class="upload-zone-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="upload-zone-text" data-i18n="upload_hint">Drag & drop <strong>PNG/TIFF</strong> files here or click to browse</div>
+      <input type="file" id="file-input" accept=".png,.tiff,.tif" multiple>
+    </div>
+    <div class="upload-progress" id="upload-progress"></div>
+
+    <!-- Files List -->
+    <div class="section-title" data-i18n="my_files">My Files</div>
+    <div class="file-grid" id="file-grid">
+      <div style="text-align:center;color:var(--muted);padding:24px;" data-i18n="no_files">No files uploaded yet</div>
+    </div>
+
+    <!-- Credit History -->
+    <div class="section-title" style="margin-top:32px;" data-i18n="credit_history">Credit History</div>
+    <div style="overflow-x:auto;">
+      <table class="history-table" style="font-size:13px;">
+        <thead>
+          <tr>
+            <th data-i18n="date">Date</th>
+            <th data-i18n="amount">Amount</th>
+            <th data-i18n="balance">Balance</th>
+            <th data-i18n="reason">Reason</th>
+          </tr>
+        </thead>
+        <tbody id="credit-history-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/customer.js"></script>
+</body>
+</html>

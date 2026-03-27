@@ -742,6 +742,30 @@ class AgentApp:
             self.status_dot.config(bg=C["red"])
             self.status_label.config(text="OFFLINE", fg=C["red"])
 
+    def download_customer_file(self, customer_file_id):
+        """Download a customer file from the server to the watched folder."""
+        try:
+            url = f"{self.server_url}/api/agent/customer-files/{customer_file_id}/download"
+            resp = requests.get(url, timeout=30, stream=True)
+            if resp.ok:
+                # Get filename from Content-Disposition header or use file_id
+                cd = resp.headers.get("content-disposition", "")
+                if "filename=" in cd:
+                    fname = cd.split("filename=")[-1].strip('"').strip("'")
+                else:
+                    fname = f"customer_{customer_file_id}.png"
+                save_path = os.path.join(self.watched_folder, fname)
+                with open(save_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                messagebox.showinfo("Download", f"File saved:\n{fname}")
+                self.send_heartbeat()
+                self.refresh_ui()
+            else:
+                messagebox.showerror("Download Error", f"Server returned {resp.status_code}")
+        except Exception as e:
+            messagebox.showerror("Download Error", str(e))
+
     def mark_printing(self, job_id):
         try:
             resp = requests.post(
@@ -1258,6 +1282,15 @@ class AgentApp:
         meta = f"{job['width_px']}x{job['height_px']} px  |  DPI: {job['dpi_x']}x{job['dpi_y']}  |  {inch_str}"
         tk.Label(info, text=meta, font=("Consolas", 9),
                  fg=C["text3"], bg=bg, anchor="w").pack(anchor="w", pady=(2, 0))
+
+        # Download button for customer files
+        if job.get("customer_file_id") and job.get("id") is not None:
+            dl_btn = tk.Button(row, text="DL", font=("Segoe UI", 10, "bold"),
+                               bg="#7c3aed", fg="white",
+                               activebackground="#6d28d9", activeforeground="white",
+                               padx=8, pady=4, relief="flat", cursor="hand2",
+                               command=lambda jid=job["id"], cfid=job["customer_file_id"]: self.download_customer_file(cfid))
+            dl_btn.pack(side="right", padx=(4, 0))
 
         # Print button
         if job.get("id") is not None:

@@ -915,3 +915,175 @@ header {
   background: var(--surface);
   color: var(--text);
 }
+
+/* ── Sidebar divider ── */
+.sidebar-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 16px 0;
+}
+
+.sidebar-empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.sidebar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #FF7A35;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-box {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  overflow-y: auto;
+  padding: 32px;
+  width: 400px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--sans);
+  outline: none;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+}
+
+.modal-input:focus {
+  border-color: var(--accent);
+}
+
+.modal-input::placeholder {
+  color: var(--muted);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modal-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.modal-btn:hover { opacity: 0.9; }
+
+.modal-btn.cancel {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+.modal-btn.confirm {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+}
+
+/* ── Customer detail ── */
+.detail-card {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.detail-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ── Action buttons in tables ── */
+.action-btn {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.action-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.assign-select {
+  padding: 3px 6px;
+  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.assign-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* ── Status badge: completed ── */
+.status-completed {
+  color: #3DCF82;
+  background: rgba(61,207,130,0.1);
+}

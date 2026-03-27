@@ -1,16 +1,21 @@
 import hashlib
 import secrets
 import time
+from typing import Optional
 from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 # ── Configuration ──
 DASHBOARD_PASSWORD = "123456ad"  # Change this to your desired password
 SESSION_COOKIE = "dtf_session"
+CUSTOMER_SESSION_COOKIE = "dtf_customer_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
 # Active sessions: token -> expiry timestamp
 _sessions: dict[str, float] = {}
+
+# Customer sessions: token -> (expiry, customer_id)
+_customer_sessions: dict[str, tuple[float, str]] = {}
 
 
 def create_session() -> str:
@@ -32,6 +37,26 @@ def check_password(password: str) -> bool:
     return password == DASHBOARD_PASSWORD
 
 
+def create_customer_session(customer_id: str) -> str:
+    token = secrets.token_hex(32)
+    _customer_sessions[token] = (time.time() + SESSION_MAX_AGE, customer_id)
+    return token
+
+
+def validate_customer_session(token: str) -> Optional[str]:
+    if not token or token not in _customer_sessions:
+        return None
+    expiry, customer_id = _customer_sessions[token]
+    if time.time() > expiry:
+        _customer_sessions.pop(token, None)
+        return None
+    return customer_id
+
+
+def invalidate_customer_session(token: str):
+    _customer_sessions.pop(token, None)
+
+
 # Paths that do NOT require authentication (agent API endpoints)
 PUBLIC_PATHS = {
     "/api/heartbeat",
@@ -41,10 +66,16 @@ PUBLIC_PATHS = {
     "/favicon.ico",
     "/api/history",
     "/ws/dashboard",
+    "/",
+    "/customer",
+    "/customer/login",
 }
 
 PUBLIC_PREFIXES = (
-    "/api/jobs/",  # /api/jobs/{id}/start, /api/jobs/{id}/complete
+    "/api/jobs/",      # /api/jobs/{id}/start, /api/jobs/{id}/complete
+    "/api/customer/auth/",  # customer login/logout
+    "/api/agent/customer-files/",  # agent downloads customer files
+    "/static/",        # static files
 )
 
 
