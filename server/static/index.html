@@ -24,6 +24,10 @@
       <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input type="text" id="search-input" placeholder="Search files...">
     </div>
+    <div class="theme-toggle" id="theme-toggle">
+      <button class="theme-btn" data-theme="light" title="Light mode">&#9788;</button>
+      <button class="theme-btn active" data-theme="dark" title="Dark mode">&#9790;</button>
+    </div>
     <div class="live-badge connected" id="conn-badge">
       <div class="live-dot"></div>
       LIVE
@@ -288,7 +292,7 @@
       <input type="text" name="name" placeholder="Customer name" class="modal-input" required>
       <input type="email" name="email" placeholder="Email" class="modal-input" required>
       <input type="password" name="password" placeholder="Password" class="modal-input" required>
-      <input type="number" name="monthly_credit_inches" placeholder="Monthly credit (inches)" class="modal-input" step="0.1" value="0">
+      <input type="number" name="initial_credit_inches" placeholder="Initial credit (inches)" class="modal-input" step="0.1" value="0">
       <div class="modal-actions">
         <button type="button" class="modal-btn cancel" onclick="closeCustomerModal()">Cancel</button>
         <button type="submit" class="modal-btn confirm">Create</button>
@@ -308,6 +312,29 @@
   </div>
 </div>
 
+<script>
+// Theme toggle
+(function() {
+  const saved = localStorage.getItem('admin-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+
+  function updateButtons() {
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === document.documentElement.getAttribute('data-theme'));
+    });
+  }
+  updateButtons();
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('theme-btn')) {
+      const theme = e.target.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('admin-theme', theme);
+      updateButtons();
+    }
+  });
+})();
+</script>
 <script src="/static/dashboard.js"></script>
 </body>
 </html>

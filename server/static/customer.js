@@ -9,7 +9,7 @@ const translations = {
     login_error: 'Invalid email or password',
     logout: 'Logout',
     remaining_credit: 'Remaining Credit',
-    monthly_allocation: 'Monthly allocation',
+    initial_credit: 'Initial credit',
     upload_files: 'Upload Files',
     upload_hint: 'Drag & drop <strong>PNG/TIFF</strong> files here or click to browse',
     my_files: 'My Files',
@@ -18,7 +18,7 @@ const translations = {
     date: 'Date', amount: 'Amount', balance: 'Balance', reason: 'Reason',
     uploading: 'Uploading...',
     uploaded: 'UPLOADED', queued: 'QUEUED', printing: 'PRINTING', completed: 'COMPLETED',
-    reason_monthly_allocation: 'Monthly Allocation',
+    reason_monthly_allocation: 'Credit Added',
     reason_print_deduction: 'Print Deduction',
     reason_manual_adjustment: 'Manual Adjustment',
     delete_confirm: 'Delete this file?',
@@ -36,7 +36,7 @@ const translations = {
     login_error: 'Gecersiz email veya sifre',
     logout: 'Cikis',
     remaining_credit: 'Kalan Kredi',
-    monthly_allocation: 'Aylik tahsisat',
+    initial_credit: 'Baslangic kredisi',
     upload_files: 'Dosya Yukle',
     upload_hint: '<strong>PNG/TIFF</strong> dosyalari surukleyip birakin veya tiklayin',
     my_files: 'Dosyalarim',
@@ -45,7 +45,7 @@ const translations = {
     date: 'Tarih', amount: 'Miktar', balance: 'Bakiye', reason: 'Aciklama',
     uploading: 'Yukleniyor...',
     uploaded: 'YUKLENDI', queued: 'KUYRUKTA', printing: 'BASILIYOR', completed: 'TAMAMLANDI',
-    reason_monthly_allocation: 'Aylik Tahsisat',
+    reason_monthly_allocation: 'Kredi Eklendi',
     reason_print_deduction: 'Baski Kesintisi',
     reason_manual_adjustment: 'Manuel Duzeltme',
     delete_confirm: 'Bu dosya silinsin mi?',
@@ -151,7 +151,6 @@ async function checkSession() {
       const data = await resp.json();
       customer = { id: data.id, name: data.name, email: data.email };
       document.getElementById('credit-balance').textContent = data.balance.toFixed(1);
-      document.getElementById('credit-monthly').textContent = data.monthly_credit_inches;
       showPortal();
     }
   } catch (err) {
@@ -165,7 +164,6 @@ async function loadProfile() {
     const resp = await fetch('/api/customer/me');
     const data = await resp.json();
     document.getElementById('credit-balance').textContent = data.balance.toFixed(1);
-    document.getElementById('credit-monthly').textContent = data.monthly_credit_inches;
     // Show available/pending if there are pending files
     const pending = data.pending_inches || 0;
     const available = data.available_balance || data.balance;

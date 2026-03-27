@@ -7,14 +7,50 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
+
+  :root, [data-theme="dark"] {
+    --l-bg: #0a0a0f;
+    --l-text: #e2e2e8;
+    --l-muted: #6b6b80;
+    --l-card-bg: #12121a;
+    --l-card-border: rgba(255,255,255,0.06);
+    --l-card-hover-bg: #16161f;
+    --l-admin-icon-bg: rgba(232,255,71,0.1);
+    --l-admin-icon-color: #E8FF47;
+    --l-customer-icon-bg: rgba(74,158,255,0.1);
+    --l-customer-icon-color: #4A9EFF;
+    --l-toggle-bg: rgba(255,255,255,0.06);
+    --l-toggle-active: rgba(255,255,255,0.12);
+    --l-toggle-text: #6b6b80;
+    --l-toggle-active-text: #e2e2e8;
+  }
+
+  [data-theme="light"] {
+    --l-bg: #FFFFFF;
+    --l-text: #1A1A1A;
+    --l-muted: #666666;
+    --l-card-bg: #F5F5F7;
+    --l-card-border: rgba(0,0,0,0.08);
+    --l-card-hover-bg: #EBEBED;
+    --l-admin-icon-bg: rgba(124,58,237,0.1);
+    --l-admin-icon-color: #7c3aed;
+    --l-customer-icon-bg: rgba(37,99,235,0.1);
+    --l-customer-icon-color: #2563eb;
+    --l-toggle-bg: rgba(0,0,0,0.05);
+    --l-toggle-active: rgba(0,0,0,0.1);
+    --l-toggle-text: #888;
+    --l-toggle-active-text: #1A1A1A;
+  }
+
   body {
     font-family: 'Inter', sans-serif;
-    background: #0a0a0f;
-    color: #e2e2e8;
+    background: var(--l-bg);
+    color: var(--l-text);
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
   }
   .landing {
     text-align: center;
@@ -33,15 +69,15 @@
     font-size: 28px; font-weight: 800; margin-bottom: 8px;
   }
   .subtitle {
-    font-size: 14px; color: #6b6b80; margin-bottom: 48px;
+    font-size: 14px; color: var(--l-muted); margin-bottom: 48px;
   }
   .cards {
     display: flex; gap: 20px;
   }
   .card {
     flex: 1;
-    background: #12121a;
-    border: 1px solid rgba(255,255,255,0.06);
+    background: var(--l-card-bg);
+    border: 1px solid var(--l-card-border);
     border-radius: 16px;
     padding: 36px 24px;
     cursor: pointer;
@@ -53,7 +89,7 @@
   .card:hover {
     border-color: #7c3aed;
     transform: translateY(-4px);
-    background: #16161f;
+    background: var(--l-card-hover-bg);
   }
   .card-icon {
     width: 48px; height: 48px;
@@ -62,25 +98,43 @@
     margin: 0 auto 16px;
   }
   .card-icon.admin {
-    background: rgba(232,255,71,0.1);
-    color: #E8FF47;
+    background: var(--l-admin-icon-bg);
+    color: var(--l-admin-icon-color);
   }
   .card-icon.customer {
-    background: rgba(74,158,255,0.1);
-    color: #4A9EFF;
+    background: var(--l-customer-icon-bg);
+    color: var(--l-customer-icon-color);
   }
   .card-title {
     font-size: 18px; font-weight: 700; margin-bottom: 8px;
   }
   .card-desc {
-    font-size: 13px; color: #6b6b80; line-height: 1.5;
+    font-size: 13px; color: var(--l-muted); line-height: 1.5;
   }
+  .landing-theme-toggle {
+    position: fixed; top: 20px; right: 20px;
+  }
+  .theme-toggle {
+    display: flex; gap: 4px; background: var(--l-toggle-bg); border-radius: 6px; padding: 2px;
+  }
+  .theme-btn {
+    padding: 4px 10px; border: none; border-radius: 5px; font-size: 14px;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+    background: transparent; color: var(--l-toggle-text); line-height: 1;
+  }
+  .theme-btn.active { background: var(--l-toggle-active); color: var(--l-toggle-active-text); }
   @media (max-width: 500px) {
     .cards { flex-direction: column; }
   }
 </style>
 </head>
 <body>
+<div class="landing-theme-toggle">
+  <div class="theme-toggle">
+    <button class="theme-btn" data-theme="light" title="Light mode">&#9788;</button>
+    <button class="theme-btn active" data-theme="dark" title="Dark mode">&#9790;</button>
+  </div>
+</div>
 <div class="landing">
   <div class="logo-mark">D</div>
   <div class="title">DTF Production Status</div>
@@ -102,5 +156,29 @@
     </a>
   </div>
 </div>
+<script>
+(function() {
+  const saved = localStorage.getItem('landing-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+
+  function updateButtons() {
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === document.documentElement.getAttribute('data-theme'));
+    });
+  }
+  updateButtons();
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('theme-btn')) {
+      const theme = e.target.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('landing-theme', theme);
+      localStorage.setItem('admin-theme', theme);
+      localStorage.setItem('customer-theme', theme);
+      updateButtons();
+    }
+  });
+})();
+</script>
 </body>
 </html>

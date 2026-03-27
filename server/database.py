@@ -543,14 +543,14 @@ def _hash_password(password: str, salt: str = None) -> tuple[str, str]:
     return hashed, salt
 
 
-def create_customer(name: str, email: str, password: str, monthly_credit_inches: float = 0) -> dict:
+def create_customer(name: str, email: str, password: str) -> dict:
     conn = get_connection()
     customer_id = str(uuid.uuid4())[:8]
     password_hash, salt = _hash_password(password)
     conn.execute("""
-        INSERT INTO customers (id, name, email, password_hash, password_salt, monthly_credit_inches)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (customer_id, name, email, password_hash, salt, monthly_credit_inches))
+        INSERT INTO customers (id, name, email, password_hash, password_salt)
+        VALUES (?, ?, ?, ?, ?)
+    """, (customer_id, name, email, password_hash, salt))
     conn.commit()
     customer = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
     conn.close()
@@ -585,7 +585,7 @@ def get_all_customers() -> list[dict]:
 
 
 def update_customer(customer_id: str, name: str = None, email: str = None,
-                    password: str = None, monthly_credit_inches: float = None) -> Optional[dict]:
+                    password: str = None) -> Optional[dict]:
     conn = get_connection()
     updates = []
     params = []
@@ -601,9 +601,6 @@ def update_customer(customer_id: str, name: str = None, email: str = None,
         params.append(hashed)
         updates.append("password_salt = ?")
         params.append(salt)
-    if monthly_credit_inches is not None:
-        updates.append("monthly_credit_inches = ?")
-        params.append(monthly_credit_inches)
     if not updates:
         conn.close()
         return get_customer_by_id(customer_id)

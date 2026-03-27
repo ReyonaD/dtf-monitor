@@ -225,14 +225,13 @@ class CreateCustomerRequest(BaseModel):
     name: str
     email: str
     password: str
-    monthly_credit_inches: float = 0
+    initial_credit_inches: float = 0
 
 
 class UpdateCustomerRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
-    monthly_credit_inches: Optional[float] = None
 
 
 class CreditRequest(BaseModel):
@@ -512,10 +511,10 @@ def _read_image_info(file_bytes: bytes, filename: str) -> dict:
 @app.post("/api/admin/customers")
 async def create_customer_endpoint(req: CreateCustomerRequest):
     try:
-        customer = create_customer(req.name, req.email, req.password, req.monthly_credit_inches)
-        # Auto-create initial credit allocation if monthly_credit_inches > 0
-        if req.monthly_credit_inches > 0:
-            add_credit(customer["id"], req.monthly_credit_inches, "monthly_allocation")
+        customer = create_customer(req.name, req.email, req.password)
+        # Auto-create initial credit if provided
+        if req.initial_credit_inches > 0:
+            add_credit(customer["id"], req.initial_credit_inches, "manual_adjustment")
         return {"status": "ok", "customer": customer}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -555,7 +554,7 @@ async def update_customer_endpoint(customer_id: str, req: UpdateCustomerRequest)
     customer = update_customer(
         customer_id,
         name=req.name, email=req.email,
-        password=req.password, monthly_credit_inches=req.monthly_credit_inches
+        password=req.password
     )
     if not customer:
         return JSONResponse({"error": "Customer not found"}, status_code=404)

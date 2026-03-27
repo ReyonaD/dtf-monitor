@@ -1082,7 +1082,6 @@ async function openCustomerDetail(customerId) {
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:12px;margin-bottom:16px;">
         <div class="detail-card"><div class="detail-label">Email</div><div class="detail-value" style="font-size:12px;">${esc(c.email)}</div></div>
         <div class="detail-card"><div class="detail-label">Balance</div><div class="detail-value">${c.balance.toFixed(1)} in</div></div>
-        <div class="detail-card"><div class="detail-label">Monthly</div><div class="detail-value">${c.monthly_credit_inches} in</div></div>
         <div class="detail-card"><div class="detail-label">Pending Files</div><div class="detail-value">${pendingFiles.length}</div></div>
       </div>
 
@@ -1200,7 +1199,7 @@ document.getElementById('customer-form')?.addEventListener('submit', async (e) =
     name: form.name.value,
     email: form.email.value,
     password: form.password.value,
-    monthly_credit_inches: parseFloat(form.monthly_credit_inches.value) || 0,
+    initial_credit_inches: parseFloat(form.initial_credit_inches.value) || 0,
   };
   try {
     const resp = await fetch('/api/admin/customers', {

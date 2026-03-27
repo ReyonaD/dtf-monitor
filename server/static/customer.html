@@ -7,12 +7,70 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 <style>
+  /* ── Dark theme (default) ── */
+  :root, [data-theme="dark"] {
+    --bg: #0A0A0B;
+    --surface: #111113;
+    --surface2: #19191D;
+    --surface3: #222228;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #F0EFE9;
+    --text2: #9B9A94;
+    --text3: #5A5956;
+    --muted: #9B9A94;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --card-border: rgba(255,255,255,0.06);
+    --input-bg: #0A0A0B;
+    --input-border: rgba(255,255,255,0.08);
+    --btn-bg: rgba(255,255,255,0.06);
+    --btn-hover: rgba(255,255,255,0.1);
+    --toggle-bg: rgba(255,255,255,0.04);
+    --toggle-active-bg: rgba(255,255,255,0.1);
+    --upload-dash: rgba(255,255,255,0.1);
+    --upload-hover-bg: rgba(124,58,237,0.06);
+    --credit-highlight: #E8FF47;
+    --credit-banner-bg: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(124,58,237,0.1));
+    --credit-banner-border: rgba(167,139,250,0.2);
+  }
+
+  /* ── Light theme ── */
+  [data-theme="light"] {
+    --bg: #FFFFFF;
+    --surface: #F5F5F7;
+    --surface2: #EBEBED;
+    --surface3: #E0E0E3;
+    --border: rgba(0,0,0,0.08);
+    --border2: rgba(0,0,0,0.14);
+    --text: #1A1A1A;
+    --text2: #6B6B6B;
+    --text3: #999999;
+    --muted: #6B6B6B;
+    --accent: #7c3aed;
+    --accent2: #6d28d9;
+    --card-border: rgba(0,0,0,0.06);
+    --input-bg: #FFFFFF;
+    --input-border: rgba(0,0,0,0.15);
+    --btn-bg: rgba(0,0,0,0.05);
+    --btn-hover: rgba(0,0,0,0.08);
+    --toggle-bg: rgba(0,0,0,0.04);
+    --toggle-active-bg: rgba(0,0,0,0.08);
+    --upload-dash: rgba(0,0,0,0.12);
+    --upload-hover-bg: rgba(124,58,237,0.04);
+    --credit-highlight: #6d28d9;
+    --credit-banner-bg: linear-gradient(135deg, rgba(167,139,250,0.1), rgba(124,58,237,0.07));
+    --credit-banner-border: rgba(124,58,237,0.2);
+  }
+
+  body { background: var(--bg); color: var(--text); transition: background 0.3s, color 0.3s; }
+
   /* Customer portal specific styles */
   .customer-app { max-width: 900px; margin: 0 auto; padding: 24px; }
 
   .customer-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 0; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 16px 0; margin-bottom: 24px; border-bottom: 1px solid var(--border);
   }
   .customer-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; }
   .customer-logo .logo-mark {
@@ -24,29 +82,29 @@
   .customer-name { font-size:14px; font-weight:600; }
   .customer-email { font-size:12px; color:var(--muted); }
   .logout-btn {
-    padding:8px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08);
+    padding:8px 16px; background:var(--btn-bg); border:1px solid var(--border);
     border-radius:8px; color:var(--text); font-size:13px; cursor:pointer; transition:background 0.15s;
   }
-  .logout-btn:hover { background:rgba(255,255,255,0.1); }
+  .logout-btn:hover { background:var(--btn-hover); }
 
   .credit-banner {
-    background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(124,58,237,0.1));
-    border: 1px solid rgba(167,139,250,0.2);
+    background: var(--credit-banner-bg);
+    border: 1px solid var(--credit-banner-border);
     border-radius: 16px; padding: 24px; margin-bottom: 24px; text-align: center;
   }
   .credit-label { font-size:13px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
   .credit-value { font-size:48px; font-weight:900; font-family:var(--mono); }
   .credit-unit { font-size:18px; font-weight:600; color:var(--muted); }
-  .credit-available { font-size:15px; margin-top:8px; color:#E8FF47; }
+  .credit-available { font-size:15px; margin-top:8px; color:var(--credit-highlight); font-weight:600; }
   .credit-sub { font-size:13px; color:var(--muted); margin-top:4px; }
 
   .upload-zone {
-    border:2px dashed rgba(255,255,255,0.1); border-radius:12px; padding:40px;
+    border:2px dashed var(--upload-dash); border-radius:12px; padding:40px;
     text-align:center; margin-bottom:24px; transition: border-color 0.2s, background 0.2s;
     cursor: pointer;
   }
   .upload-zone:hover, .upload-zone.drag-over {
-    border-color:var(--accent); background:rgba(232,255,71,0.03);
+    border-color:var(--accent); background:var(--upload-hover-bg);
   }
   .upload-zone-icon { font-size:32px; margin-bottom:8px; color:var(--muted); }
   .upload-zone-text { font-size:14px; color:var(--muted); }
@@ -60,7 +118,7 @@
 
   .file-grid { display:flex; flex-direction:column; gap:8px; }
   .file-card {
-    background:var(--surface); border:1px solid rgba(255,255,255,0.06);
+    background:var(--surface); border:1px solid var(--card-border);
     border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:14px;
   }
   .file-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
@@ -78,23 +136,23 @@
   }
   .file-delete:hover { opacity:1; }
 
-  /* Language toggle */
-  .lang-toggle {
-    display:flex; gap:4px; background:rgba(255,255,255,0.04); border-radius:6px; padding:2px;
+  /* Language & theme toggle */
+  .lang-toggle, .theme-toggle {
+    display:flex; gap:4px; background:var(--toggle-bg); border-radius:6px; padding:2px;
   }
-  .lang-btn {
+  .lang-btn, .theme-btn {
     padding:4px 10px; border:none; border-radius:5px; font-size:12px; font-weight:600;
     cursor:pointer; transition: background 0.15s, color 0.15s;
     background:transparent; color:var(--muted);
   }
-  .lang-btn.active { background:rgba(255,255,255,0.1); color:var(--text); }
+  .lang-btn.active, .theme-btn.active { background:var(--toggle-active-bg); color:var(--text); }
 
   /* Login page */
   .login-wrap {
     display:flex; align-items:center; justify-content:center; min-height:100vh;
   }
   .login-box {
-    background:var(--surface); border:1px solid rgba(255,255,255,0.06);
+    background:var(--surface); border:1px solid var(--card-border);
     border-radius:16px; padding:48px 40px; width:380px; text-align:center;
   }
   .login-logo {
@@ -105,7 +163,7 @@
   .login-title { font-size:20px; font-weight:700; margin-bottom:6px; }
   .login-sub { font-size:13px; color:var(--muted); margin-bottom:32px; }
   .login-input {
-    width:100%; padding:14px 16px; background:var(--bg); border:1px solid rgba(255,255,255,0.08);
+    width:100%; padding:14px 16px; background:var(--input-bg); border:1px solid var(--input-border);
     border-radius:10px; color:var(--text); font-size:15px; font-family:var(--sans);
     outline:none; margin-bottom:10px; transition:border-color 0.2s;
   }
@@ -121,12 +179,23 @@
   .login-error.show { display:block; }
 
   .section-title { font-size:16px; font-weight:700; margin-bottom:16px; }
+
+  /* Theme toggle in login */
+  .login-theme-toggle {
+    position:absolute; top:20px; right:20px;
+  }
 </style>
 </head>
 <body>
 
 <!-- Login View -->
 <div id="login-view" class="login-wrap">
+  <div class="login-theme-toggle">
+    <div class="theme-toggle">
+      <button class="theme-btn" data-theme="light" title="Light mode">&#9788;</button>
+      <button class="theme-btn active" data-theme="dark" title="Dark mode">&#9790;</button>
+    </div>
+  </div>
   <div class="login-box">
     <div class="login-logo">D</div>
     <div class="login-title" data-i18n="portal_title">Customer Portal</div>
@@ -154,6 +223,10 @@
           <div class="customer-name" id="user-name"></div>
           <div class="customer-email" id="user-email"></div>
         </div>
+        <div class="theme-toggle" id="portal-theme-toggle">
+          <button class="theme-btn" data-theme="light" title="Light mode">&#9788;</button>
+          <button class="theme-btn active" data-theme="dark" title="Dark mode">&#9790;</button>
+        </div>
         <div class="lang-toggle">
           <button class="lang-btn active" data-lang="en">EN</button>
           <button class="lang-btn" data-lang="tr">TR</button>
@@ -170,7 +243,6 @@
         <span data-i18n="available">Available</span>: <span id="credit-available" style="font-weight:700;">0</span> in
         <span style="color:var(--muted);margin-left:4px;">(<span data-i18n="pending">pending</span>: <span id="credit-pending">0</span> in)</span>
       </div>
-      <div class="credit-sub"><span data-i18n="monthly_allocation">Monthly allocation</span>: <span id="credit-monthly">0</span> in</div>
     </div>
 
     <!-- Upload Zone -->
@@ -209,6 +281,29 @@
   </div>
 </div>
 
+<script>
+// Theme toggle
+(function() {
+  const saved = localStorage.getItem('customer-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+
+  function updateButtons() {
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === document.documentElement.getAttribute('data-theme'));
+    });
+  }
+  updateButtons();
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('theme-btn')) {
+      const theme = e.target.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('customer-theme', theme);
+      updateButtons();
+    }
+  });
+})();
+</script>
 <script src="/static/customer.js"></script>
 </body>
 </html>
