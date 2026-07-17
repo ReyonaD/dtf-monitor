@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+websockets
+pillow
+watchdog
+pystray
+requests
+pyinstaller
+python-multipart
+gspread
+google-auth

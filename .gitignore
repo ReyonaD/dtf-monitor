@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Build artifacts
+agent/build/
+agent/dist/
+*.spec
+
+# Database
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
+
+# Config (contains local machine settings)
+agent/config.json
+
+# Google Sheets credentials
+server/second-broker-*.json
+
+# OS
+.DS_Store
+
+# Archives
+*.zip
+
+# Uploaded customer files
+server/uploads/
+
+# IDE
+.vscode/
+.idea/
+
+# Large log files
+RIPLOG.HTML
+*.log
+
+# Compiled agent binary
+agent/DTF-Monitor-Agent.exe
