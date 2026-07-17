@@ -40,7 +40,8 @@ from database import (
     update_customer_file_copies, get_pending_inches,
     get_customer_files_for_machine, match_customer_file_by_code,
 )
-from google_sheets import update_orders_for_jobs
+# Order Tracker integration (replaces the old Google Sheets writer).
+from order_tracker import update_orders_for_jobs
 
 logger = logging.getLogger(__name__)
 

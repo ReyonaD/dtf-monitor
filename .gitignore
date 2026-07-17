@@ -39,3 +39,6 @@ RIPLOG.HTML
 
 # Compiled agent binary
 agent/DTF-Monitor-Agent.exe
+
+# Order Tracker integration key (local secret)
+server/ot_config.json
