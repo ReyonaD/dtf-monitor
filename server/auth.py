@@ -1,3 +1,4 @@
+import os
 import hashlib
 import secrets
 import time
@@ -6,7 +7,9 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 # ── Configuration ──
-DASHBOARD_PASSWORD = "123456ad"  # Change this to your desired password
+# Dashboard password comes from the DASHBOARD_PASSWORD env var (set on the host).
+# The fallback is only for local dev and is NOT the real password.
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "changeme")
 SESSION_COOKIE = "dtf_session"
 CUSTOMER_SESSION_COOKIE = "dtf_customer_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
