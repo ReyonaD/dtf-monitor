@@ -7,7 +7,9 @@ import secrets
 from datetime import datetime, date
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "dtf_monitor.db")
+# DB path: env override (e.g. a Railway volume) or local file next to this module.
+DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "dtf_monitor.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 
 def get_connection():

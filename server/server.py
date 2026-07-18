@@ -109,8 +109,8 @@ class CustomerConnectionManager:
 
 customer_manager = CustomerConnectionManager()
 
-# Upload directory
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+# Upload directory: env override (e.g. a Railway volume) or local folder.
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
@@ -967,4 +967,5 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8090)
+    # Railway (and other hosts) provide the port via $PORT; default 8090 locally.
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8090")))
