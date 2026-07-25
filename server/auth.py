@@ -65,6 +65,7 @@ PUBLIC_PATHS = {
     "/api/heartbeat",
     "/api/nest",
     "/api/unnest",
+    "/api/integrations/warehouse-split",  # API-key protected (OT_API_KEY), not session
     "/login",
     "/favicon.ico",
     "/api/history",

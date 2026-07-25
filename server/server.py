@@ -487,6 +487,19 @@ async def store_report(start: str = Query(...), end: str = Query(...), warehouse
     return get_store_report(start, end, warehouse)
 
 
+# Machine-to-machine integration for Order Tracker: warehouse split per store x
+# machine type. Protected by a shared API key (OT_API_KEY), not the dashboard
+# session. Returns the raw store x machine_type x warehouse inches; the caller
+# maps store codes / warehouse names and computes the percentages.
+@app.get("/api/integrations/warehouse-split")
+async def integration_warehouse_split(request: Request, start: str = Query(...), end: str = Query(...)):
+    expected = os.environ.get("OT_API_KEY", "")
+    if not expected or request.headers.get("X-API-Key", "") != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    rep = get_store_report(start, end)
+    return {"start": start, "end": end, "store_type_wh": rep["store_type_wh"]}
+
+
 @app.get("/api/reports/store-cell")
 async def store_cell_details(
     store: str = Query(...),
