@@ -1101,6 +1101,12 @@ class AgentApp:
         wrap.place(relx=0.5, rely=0.5, anchor="center")
         tk.Label(wrap, text="⛔  PRINT REQUIRED", font=("Segoe UI", 34, "bold"),
                  fg=C["red"], bg=C["bg"]).pack(pady=(0, 4))
+        # Operator name (bound to the same var as the main window, so it syncs).
+        op = tk.Frame(wrap, bg=C["bg"]); op.pack(pady=(0, 16))
+        tk.Label(op, text="OPERATOR:", font=("Segoe UI", 10, "bold"), fg=C["text2"], bg=C["bg"]).pack(side="left", padx=(0, 8))
+        tk.Entry(op, textvariable=self.operator_var, font=("Segoe UI", 12), width=26,
+                 bg=C["surface2"], fg=C["text"], insertbackground=C["text"], relief="flat").pack(side="left", ipady=5)
+
         # Group queued jobs by nest so a nest needs only ONE Print (like the main UI:
         # the server's start_printing starts the whole nest from any member).
         nests, solo = {}, []
@@ -1110,28 +1116,35 @@ class AgentApp:
                 nests.setdefault(ng, []).append(j)
             else:
                 solo.append(j)
-        items = []  # (label, inches, job_id_to_print)
+        items = []  # {label, inch, jid, files}
         for ng, jobs in nests.items():
             t = sum(x.get("print_inches", 0) * x.get("copies", 1) for x in jobs)
-            items.append((f"Nest · {len(jobs)} files", t, jobs[0].get("id")))
+            items.append({"label": f"Nest · {len(jobs)} files", "inch": t, "jid": jobs[0].get("id"),
+                          "files": [x.get("filename", "file") for x in jobs]})
         for j in solo:
-            items.append((j.get("filename", "file"), j.get("print_inches", 0) * j.get("copies", 1), j.get("id")))
+            items.append({"label": j.get("filename", "file"), "inch": j.get("print_inches", 0) * j.get("copies", 1),
+                          "jid": j.get("id"), "files": None})
 
         tk.Label(wrap, text=f"{len(items)} print(s) waiting. Press PRINT on each to unlock the screen.",
-                 font=("Segoe UI", 14), fg=C["text"], bg=C["bg"]).pack(pady=(0, 20))
-        for label, inch, jid in items[:14]:
+                 font=("Segoe UI", 14), fg=C["text"], bg=C["bg"]).pack(pady=(0, 18))
+        for it in items[:12]:
             row = tk.Frame(wrap, bg=C["surface"], padx=16, pady=10)
             row.pack(fill="x", pady=4)
-            tk.Label(row, text=label, font=("Segoe UI", 12, "bold"),
+            head = tk.Frame(row, bg=C["surface"]); head.pack(fill="x")
+            tk.Label(head, text=it["label"], font=("Segoe UI", 12, "bold"),
                      fg=C["text"], bg=C["surface"], anchor="w").pack(side="left")
-            tk.Label(row, text=f"{inch:.1f} in", font=("Consolas", 10),
+            tk.Label(head, text=f'{it["inch"]:.1f} in', font=("Consolas", 10),
                      fg=C["text2"], bg=C["surface"]).pack(side="left", padx=14)
-            tk.Button(row, text="PRINT", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
+            jid = it["jid"]
+            tk.Button(head, text="PRINT", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
                       activebackground="#3580D4", activeforeground="white", relief="flat",
                       padx=22, pady=6, cursor="hand2",
                       command=lambda jid=jid: self.mark_printing(jid)).pack(side="right")
-        if len(items) > 14:
-            tk.Label(wrap, text=f"... and {len(items) - 14} more", font=("Segoe UI", 10),
+            for fn in (it["files"] or []):
+                tk.Label(row, text=f"· {fn}", font=("Segoe UI", 10), fg=C["text2"],
+                         bg=C["surface"], anchor="w").pack(fill="x", padx=(6, 0), pady=(2, 0))
+        if len(items) > 12:
+            tk.Label(wrap, text=f"... and {len(items) - 12} more", font=("Segoe UI", 10),
                      fg=C["text2"], bg=C["bg"]).pack(pady=(6, 0))
         sup = tk.Frame(wrap, bg=C["bg"]); sup.pack(pady=(24, 0))
         self._lock_pin = tk.Entry(sup, show="*", width=8, font=("Segoe UI", 11),
