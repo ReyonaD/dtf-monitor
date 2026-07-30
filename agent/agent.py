@@ -782,18 +782,15 @@ class AgentApp:
         except Exception as e:
             messagebox.showerror("Download Error", str(e))
 
-    def _confirm_not_duplicate(self, job_id):
-        """Warn if this file (or any file in its nest) was already printed in
-        Order Tracker. Returns True to proceed. Fails open on any error so a
-        network hiccup never blocks a real print."""
+    def _duplicate_info(self, job_id):
+        """Return a list of (filename, machine, operator) for files in this print
+        (incl. nest siblings) that Order Tracker says were already printed.
+        Empty list = safe to print. Fails open on any error."""
         job = next((j for j in self.jobs if j.get("id") == job_id), None)
         if not job:
-            return True
+            return []
         ng = job.get("nest_group")
-        if ng:
-            files = [j for j in self.jobs if j.get("nest_group") == ng]
-        else:
-            files = [job]
+        files = [j for j in self.jobs if j.get("nest_group") == ng] if ng else [job]
         already = []
         for j in files:
             fn = j.get("filename", "")
@@ -802,29 +799,42 @@ class AgentApp:
             try:
                 r = requests.get(f"{self.server_url}/api/order-status",
                                  params={"filename": fn}, timeout=4)
-                if r.ok:
+                if r.ok and r.json().get("printed"):
                     d = r.json()
-                    if d.get("printed"):
-                        already.append((fn, d.get("machine", ""), d.get("operator", "")))
+                    already.append((fn, d.get("machine", ""), d.get("operator", "")))
             except Exception:
                 pass  # fail open
-        if not already:
-            return True
-        lines = "\n".join(
-            f"• {fn}\n     Machine: {m or '—'}    Operator: {o or '—'}" for fn, m, o in already
-        )
-        msg = f"This file was already printed:\n\n{lines}\n\nPrint it again anyway?"
-        self._lock_paused = True
-        try:
-            return messagebox.askyesno("Already printed", msg,
-                                       parent=(getattr(self, "lock_win", None) or self.root),
-                                       icon="warning")
-        finally:
-            self._lock_paused = False
+        return already
 
-    def mark_printing(self, job_id):
-        if not self._confirm_not_duplicate(job_id):
+    def _show_lock_confirm(self, already, on_yes):
+        """Centered 'already printed' confirmation drawn INSIDE the lock window
+        (not a separate window that would hide behind it)."""
+        win = getattr(self, "lock_win", None)
+        if win is None:
             return
+        ov = tk.Frame(win, bg=C["bg"])
+        ov.place(relx=0, rely=0, relwidth=1, relheight=1)
+        card = tk.Frame(ov, bg=C["surface"], padx=34, pady=28,
+                        highlightbackground=C["red"], highlightthickness=2)
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        tk.Label(card, text="⚠  ALREADY PRINTED", font=("Segoe UI", 22, "bold"),
+                 fg=C["red"], bg=C["surface"]).pack(pady=(0, 12))
+        for fn, m, o in already:
+            tk.Label(card, text=fn, font=("Segoe UI", 12, "bold"), fg=C["text"],
+                     bg=C["surface"], anchor="w").pack(anchor="w")
+            tk.Label(card, text=f"Machine: {m or '—'}     Operator: {o or '—'}",
+                     font=("Segoe UI", 11), fg=C["text2"], bg=C["surface"], anchor="w").pack(anchor="w", pady=(0, 8))
+        tk.Label(card, text="Print it again anyway?", font=("Segoe UI", 13),
+                 fg=C["text"], bg=C["surface"]).pack(pady=(6, 16))
+        btns = tk.Frame(card, bg=C["surface"]); btns.pack()
+        tk.Button(btns, text="Print anyway", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
+                  activebackground="#3580D4", activeforeground="white", relief="flat", padx=22, pady=8,
+                  cursor="hand2", command=lambda: (ov.destroy(), on_yes())).pack(side="left", padx=8)
+        tk.Button(btns, text="Cancel", font=("Segoe UI", 12), fg=C["text"], bg=C["surface3"],
+                  activebackground=C["border2"], activeforeground=C["text"], relief="flat", padx=22, pady=8,
+                  cursor="hand2", command=ov.destroy).pack(side="left", padx=8)
+
+    def _do_start(self, job_id):
         try:
             resp = requests.post(
                 f"{self.server_url}/api/jobs/{job_id}/start",
@@ -836,6 +846,21 @@ class AgentApp:
                 self.refresh_ui()
         except Exception as e:
             print(f"Error marking printing: {e}")
+
+    def mark_printing(self, job_id):
+        already = self._duplicate_info(job_id)
+        if not already:
+            self._do_start(job_id)
+            return
+        if getattr(self, "lock_win", None) is not None:
+            # draw the warning inside the lock screen (no separate window)
+            self._show_lock_confirm(already, lambda: self._do_start(job_id))
+        else:
+            lines = "\n".join(f"• {fn}\n     Machine: {m or '—'}    Operator: {o or '—'}" for fn, m, o in already)
+            if messagebox.askyesno("Already printed",
+                                    f"This file was already printed:\n\n{lines}\n\nPrint it again anyway?",
+                                    parent=self.root, icon="warning"):
+                self._do_start(job_id)
 
     def mark_done(self, job_id):
         try:
