@@ -1101,23 +1101,37 @@ class AgentApp:
         wrap.place(relx=0.5, rely=0.5, anchor="center")
         tk.Label(wrap, text="⛔  PRINT REQUIRED", font=("Segoe UI", 34, "bold"),
                  fg=C["red"], bg=C["bg"]).pack(pady=(0, 4))
-        tk.Label(wrap, text=f"{len(queued)} file(s) waiting. Press PRINT on each file to unlock the screen.",
+        # Group queued jobs by nest so a nest needs only ONE Print (like the main UI:
+        # the server's start_printing starts the whole nest from any member).
+        nests, solo = {}, []
+        for j in queued:
+            ng = j.get("nest_group")
+            if ng:
+                nests.setdefault(ng, []).append(j)
+            else:
+                solo.append(j)
+        items = []  # (label, inches, job_id_to_print)
+        for ng, jobs in nests.items():
+            t = sum(x.get("print_inches", 0) * x.get("copies", 1) for x in jobs)
+            items.append((f"Nest · {len(jobs)} files", t, jobs[0].get("id")))
+        for j in solo:
+            items.append((j.get("filename", "file"), j.get("print_inches", 0) * j.get("copies", 1), j.get("id")))
+
+        tk.Label(wrap, text=f"{len(items)} print(s) waiting. Press PRINT on each to unlock the screen.",
                  font=("Segoe UI", 14), fg=C["text"], bg=C["bg"]).pack(pady=(0, 20))
-        for j in queued[:14]:
+        for label, inch, jid in items[:14]:
             row = tk.Frame(wrap, bg=C["surface"], padx=16, pady=10)
             row.pack(fill="x", pady=4)
-            inch = j.get("print_inches", 0) * j.get("copies", 1)
-            tk.Label(row, text=j.get("filename", "file"), font=("Segoe UI", 12, "bold"),
+            tk.Label(row, text=label, font=("Segoe UI", 12, "bold"),
                      fg=C["text"], bg=C["surface"], anchor="w").pack(side="left")
             tk.Label(row, text=f"{inch:.1f} in", font=("Consolas", 10),
                      fg=C["text2"], bg=C["surface"]).pack(side="left", padx=14)
-            jid = j.get("id")
             tk.Button(row, text="PRINT", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
                       activebackground="#3580D4", activeforeground="white", relief="flat",
                       padx=22, pady=6, cursor="hand2",
                       command=lambda jid=jid: self.mark_printing(jid)).pack(side="right")
-        if len(queued) > 14:
-            tk.Label(wrap, text=f"... and {len(queued) - 14} more", font=("Segoe UI", 10),
+        if len(items) > 14:
+            tk.Label(wrap, text=f"... and {len(items) - 14} more", font=("Segoe UI", 10),
                      fg=C["text2"], bg=C["bg"]).pack(pady=(6, 0))
         sup = tk.Frame(wrap, bg=C["bg"]); sup.pack(pady=(24, 0))
         self._lock_pin = tk.Entry(sup, show="*", width=8, font=("Segoe UI", 11),
