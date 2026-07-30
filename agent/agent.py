@@ -812,6 +812,17 @@ class AgentApp:
         win = getattr(self, "lock_win", None)
         if win is None:
             return
+        self._confirm_active = True
+
+        def close(run):
+            self._confirm_active = False
+            try: ov.destroy()
+            except Exception: pass
+            if run:
+                on_yes()
+            else:
+                self.update_lock()  # re-sync lock content after cancel
+
         ov = tk.Frame(win, bg=C["bg"])
         ov.place(relx=0, rely=0, relwidth=1, relheight=1)
         card = tk.Frame(ov, bg=C["surface"], padx=34, pady=28,
@@ -829,10 +840,10 @@ class AgentApp:
         btns = tk.Frame(card, bg=C["surface"]); btns.pack()
         tk.Button(btns, text="Print anyway", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
                   activebackground="#3580D4", activeforeground="white", relief="flat", padx=22, pady=8,
-                  cursor="hand2", command=lambda: (ov.destroy(), on_yes())).pack(side="left", padx=8)
+                  cursor="hand2", command=lambda: close(True)).pack(side="left", padx=8)
         tk.Button(btns, text="Cancel", font=("Segoe UI", 12), fg=C["text"], bg=C["surface3"],
                   activebackground=C["border2"], activeforeground=C["text"], relief="flat", padx=22, pady=8,
-                  cursor="hand2", command=ov.destroy).pack(side="left", padx=8)
+                  cursor="hand2", command=lambda: close(False)).pack(side="left", padx=8)
 
     def _do_start(self, job_id):
         try:
@@ -1118,7 +1129,7 @@ class AgentApp:
         queued = [j for j in self.jobs if j.get("status") == "queued" and j.get("id") is not None]
         if queued and time.time() > getattr(self, "lock_dismiss_until", 0):
             self.show_lock(queued)
-        else:
+        elif not getattr(self, "_confirm_active", False):
             self.hide_lock()
 
     def hide_lock(self):
@@ -1128,38 +1139,49 @@ class AgentApp:
             except Exception: pass
         self.lock_win = None
         self._lock_sig = None
+        self._confirm_active = False
 
     def show_lock(self, queued):
+        # Persistent window: create once, then only re-render the BODY when the
+        # queued set changes. Never destroy/recreate on every refresh (that
+        # flickered and wiped the confirmation panel).
+        win = getattr(self, "lock_win", None)
+        if win is None or not win.winfo_exists():
+            win = tk.Toplevel(self.root)
+            self.lock_win = win
+            try: win.overrideredirect(True)
+            except Exception: pass
+            try: win.attributes("-fullscreen", True)
+            except Exception:
+                win.geometry(f"{win.winfo_screenwidth()}x{win.winfo_screenheight()}+0+0")
+            win.attributes("-topmost", True)
+            win.configure(bg=C["bg"])
+            win.protocol("WM_DELETE_WINDOW", lambda: None)
+            self._lock_body = tk.Frame(win, bg=C["bg"])
+            self._lock_body.pack(fill="both", expand=True)
+            self._lock_sig = None
+            self._confirm_active = False
+            self._start_keep_top()
+        if getattr(self, "_confirm_active", False):
+            return  # a confirmation is open — don't disturb it
         sig = tuple(j.get("id") for j in queued)
-        if getattr(self, "lock_win", None) is not None:
-            if getattr(self, "_lock_sig", None) == sig:
-                try:
-                    self.lock_win.lift(); self.lock_win.attributes("-topmost", True)
-                except Exception: pass
-                return
-            self.hide_lock()
-        self._lock_sig = sig
-        win = tk.Toplevel(self.root)
-        self.lock_win = win
-        try: win.overrideredirect(True)
-        except Exception: pass
-        try: win.attributes("-fullscreen", True)
-        except Exception:
-            win.geometry(f"{win.winfo_screenwidth()}x{win.winfo_screenheight()}+0+0")
-        win.attributes("-topmost", True)
-        win.configure(bg=C["bg"])
-        win.protocol("WM_DELETE_WINDOW", lambda: None)
-        self._render_lock(win, queued)
+        if sig != getattr(self, "_lock_sig", None):
+            self._lock_sig = sig
+            for ch in self._lock_body.winfo_children():
+                ch.destroy()
+            self._render_lock(self._lock_body, queued)
 
+    def _start_keep_top(self):
         def keep_top():
             w = getattr(self, "lock_win", None)
             if w is None: return
             try:
-                if not getattr(self, "_lock_paused", False):   # paused while a dialog is open
+                if not w.winfo_exists(): return
+                if not getattr(self, "_lock_paused", False):
                     w.lift(); w.attributes("-topmost", True)
                     if w.focus_get() is None:   # focus left the app entirely -> pull it back
                         w.focus_force()
-                w.after(700, keep_top)
+                w.after(800, keep_top)
             except Exception:
                 pass
         keep_top()
