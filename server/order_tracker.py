@@ -75,6 +75,26 @@ def update_order(order_code: str, machine_name: str, operator: str = "") -> bool
         return False
 
 
+def get_order_status(order_code: str) -> Optional[dict]:
+    """Look up an order's print status in Order Tracker (for the duplicate-print
+    warning). Returns the JSON dict, or None on error / no key."""
+    if not API_KEY:
+        return None
+    try:
+        resp = requests.get(
+            f"{API_URL}/integrations/order-status",
+            headers={"X-Api-Key": API_KEY},
+            params={"code": order_code},
+            timeout=TIMEOUT,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        logger.error(f"Order status check failed for '{order_code}': {e}")
+        return None
+
+
 def update_orders_for_jobs(jobs: list[dict], machine_name: str, operator: str = ""):
     """
     Process completed jobs — extract order codes and mark them printed.

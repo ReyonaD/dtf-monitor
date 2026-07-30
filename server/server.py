@@ -41,7 +41,7 @@ from database import (
     get_customer_files_for_machine, match_customer_file_by_code,
 )
 # Order Tracker integration (replaces the old Google Sheets writer).
-from order_tracker import update_orders_for_jobs
+from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status
 
 logger = logging.getLogger(__name__)
 
@@ -485,6 +485,19 @@ async def report_details(machine_name: str = Query(...), day: str = Query(...)):
 @app.get("/api/reports/stores")
 async def store_report(start: str = Query(...), end: str = Query(...), warehouse: Optional[str] = Query(None)):
     return get_store_report(start, end, warehouse)
+
+
+# Duplicate-print check for the agent: given a filename, extract the order code
+# and ask Order Tracker whether it was already printed (by which machine/operator).
+@app.get("/api/order-status")
+async def order_status(filename: str = Query(...)):
+    code = extract_order_code(filename)
+    if not code:
+        return {"code": None, "found": False, "printed": False}
+    st = get_order_status(code)
+    if not st:
+        return {"code": code, "found": False, "printed": False}
+    return st
 
 
 # Machine-to-machine integration for Order Tracker: warehouse split per store x

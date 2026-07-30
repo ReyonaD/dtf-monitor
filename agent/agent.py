@@ -782,7 +782,49 @@ class AgentApp:
         except Exception as e:
             messagebox.showerror("Download Error", str(e))
 
+    def _confirm_not_duplicate(self, job_id):
+        """Warn if this file (or any file in its nest) was already printed in
+        Order Tracker. Returns True to proceed. Fails open on any error so a
+        network hiccup never blocks a real print."""
+        job = next((j for j in self.jobs if j.get("id") == job_id), None)
+        if not job:
+            return True
+        ng = job.get("nest_group")
+        if ng:
+            files = [j for j in self.jobs if j.get("nest_group") == ng]
+        else:
+            files = [job]
+        already = []
+        for j in files:
+            fn = j.get("filename", "")
+            if not fn:
+                continue
+            try:
+                r = requests.get(f"{self.server_url}/api/order-status",
+                                 params={"filename": fn}, timeout=4)
+                if r.ok:
+                    d = r.json()
+                    if d.get("printed"):
+                        already.append((fn, d.get("machine", ""), d.get("operator", "")))
+            except Exception:
+                pass  # fail open
+        if not already:
+            return True
+        lines = "\n".join(
+            f"• {fn}\n     Machine: {m or '—'}    Operator: {o or '—'}" for fn, m, o in already
+        )
+        msg = f"This file was already printed:\n\n{lines}\n\nPrint it again anyway?"
+        self._lock_paused = True
+        try:
+            return messagebox.askyesno("Already printed", msg,
+                                       parent=(getattr(self, "lock_win", None) or self.root),
+                                       icon="warning")
+        finally:
+            self._lock_paused = False
+
     def mark_printing(self, job_id):
+        if not self._confirm_not_duplicate(job_id):
+            return
         try:
             resp = requests.post(
                 f"{self.server_url}/api/jobs/{job_id}/start",
@@ -1088,9 +1130,10 @@ class AgentApp:
             w = getattr(self, "lock_win", None)
             if w is None: return
             try:
-                w.lift(); w.attributes("-topmost", True)
-                if w.focus_get() is None:   # focus left the app entirely -> pull it back
-                    w.focus_force()
+                if not getattr(self, "_lock_paused", False):   # paused while a dialog is open
+                    w.lift(); w.attributes("-topmost", True)
+                    if w.focus_get() is None:   # focus left the app entirely -> pull it back
+                        w.focus_force()
                 w.after(700, keep_top)
             except Exception:
                 pass

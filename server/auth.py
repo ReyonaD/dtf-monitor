@@ -66,6 +66,7 @@ PUBLIC_PATHS = {
     "/api/nest",
     "/api/unnest",
     "/api/integrations/warehouse-split",  # API-key protected (OT_API_KEY), not session
+    "/api/order-status",                  # agent duplicate-print check (read-only)
     "/login",
     "/favicon.ico",
     "/api/history",
