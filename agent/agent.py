@@ -386,7 +386,16 @@ class RIPLogWatcher:
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
+            cfg = json.load(f)
+        # Defaults for newer settings (written back so they're editable in config.json).
+        changed = False
+        for k, v in {"lock_enabled": True, "supervisor_pin": "1234"}.items():
+            if k not in cfg:
+                cfg[k] = v
+                changed = True
+        if changed:
+            save_config(cfg)
+        return cfg
     return None
 
 
@@ -1029,6 +1038,107 @@ class AgentApp:
         val_label.pack()
         return val_label
 
+    # ── Print lock: cover the screen while files are un-printed (queued) ──
+    # Forces the operator to press PRINT on every new file. Safety valves:
+    # only locks when online (can actually mark), and a supervisor PIN grants a
+    # 5-minute grace so a glitch never bricks the PC. NOTE: this is a strong
+    # on-top full-screen gate, not an OS-level lock (Ctrl+Alt+Del can still escape).
+    def update_lock(self):
+        if not self.config.get("lock_enabled", True):
+            self.hide_lock(); return
+        if not getattr(self, "connected", False):
+            self.hide_lock(); return  # never trap the PC when we can't mark jobs
+        queued = [j for j in self.jobs if j.get("status") == "queued" and j.get("id") is not None]
+        if queued and time.time() > getattr(self, "lock_dismiss_until", 0):
+            self.show_lock(queued)
+        else:
+            self.hide_lock()
+
+    def hide_lock(self):
+        w = getattr(self, "lock_win", None)
+        if w is not None:
+            try: w.destroy()
+            except Exception: pass
+        self.lock_win = None
+        self._lock_sig = None
+
+    def show_lock(self, queued):
+        sig = tuple(j.get("id") for j in queued)
+        if getattr(self, "lock_win", None) is not None:
+            if getattr(self, "_lock_sig", None) == sig:
+                try:
+                    self.lock_win.lift(); self.lock_win.attributes("-topmost", True)
+                except Exception: pass
+                return
+            self.hide_lock()
+        self._lock_sig = sig
+        win = tk.Toplevel(self.root)
+        self.lock_win = win
+        try: win.overrideredirect(True)
+        except Exception: pass
+        try: win.attributes("-fullscreen", True)
+        except Exception:
+            win.geometry(f"{win.winfo_screenwidth()}x{win.winfo_screenheight()}+0+0")
+        win.attributes("-topmost", True)
+        win.configure(bg=C["bg"])
+        win.protocol("WM_DELETE_WINDOW", lambda: None)
+        self._render_lock(win, queued)
+
+        def keep_top():
+            w = getattr(self, "lock_win", None)
+            if w is None: return
+            try:
+                w.lift(); w.attributes("-topmost", True)
+                if w.focus_get() is None:   # focus left the app entirely -> pull it back
+                    w.focus_force()
+                w.after(700, keep_top)
+            except Exception:
+                pass
+        keep_top()
+
+    def _render_lock(self, win, queued):
+        wrap = tk.Frame(win, bg=C["bg"])
+        wrap.place(relx=0.5, rely=0.5, anchor="center")
+        tk.Label(wrap, text="⛔  PRINT REQUIRED", font=("Segoe UI", 34, "bold"),
+                 fg=C["red"], bg=C["bg"]).pack(pady=(0, 4))
+        tk.Label(wrap, text=f"{len(queued)} file(s) waiting. Press PRINT on each file to unlock the screen.",
+                 font=("Segoe UI", 14), fg=C["text"], bg=C["bg"]).pack(pady=(0, 20))
+        for j in queued[:14]:
+            row = tk.Frame(wrap, bg=C["surface"], padx=16, pady=10)
+            row.pack(fill="x", pady=4)
+            inch = j.get("print_inches", 0) * j.get("copies", 1)
+            tk.Label(row, text=j.get("filename", "file"), font=("Segoe UI", 12, "bold"),
+                     fg=C["text"], bg=C["surface"], anchor="w").pack(side="left")
+            tk.Label(row, text=f"{inch:.1f} in", font=("Consolas", 10),
+                     fg=C["text2"], bg=C["surface"]).pack(side="left", padx=14)
+            jid = j.get("id")
+            tk.Button(row, text="PRINT", font=("Segoe UI", 12, "bold"), fg="white", bg=C["blue"],
+                      activebackground="#3580D4", activeforeground="white", relief="flat",
+                      padx=22, pady=6, cursor="hand2",
+                      command=lambda jid=jid: self.mark_printing(jid)).pack(side="right")
+        if len(queued) > 14:
+            tk.Label(wrap, text=f"... and {len(queued) - 14} more", font=("Segoe UI", 10),
+                     fg=C["text2"], bg=C["bg"]).pack(pady=(6, 0))
+        sup = tk.Frame(wrap, bg=C["bg"]); sup.pack(pady=(24, 0))
+        self._lock_pin = tk.Entry(sup, show="*", width=8, font=("Segoe UI", 11),
+                                  bg=C["surface2"], fg=C["text"], insertbackground=C["text"], relief="flat")
+        self._lock_pin.pack(side="left", ipady=4, padx=(0, 8))
+        tk.Button(sup, text="Supervisor unlock (5 min)", font=("Segoe UI", 9),
+                  fg=C["text2"], bg=C["surface3"], relief="flat", padx=12, pady=5, cursor="hand2",
+                  command=self._supervisor_unlock).pack(side="left")
+        self._lock_msg = tk.Label(wrap, text="", font=("Segoe UI", 10), fg=C["red"], bg=C["bg"])
+        self._lock_msg.pack(pady=(8, 0))
+
+    def _supervisor_unlock(self):
+        try: pin = self._lock_pin.get().strip()
+        except Exception: pin = ""
+        if pin == str(self.config.get("supervisor_pin", "1234")):
+            self.lock_dismiss_until = time.time() + 300  # 5-minute grace
+            self.hide_lock()
+        else:
+            try: self._lock_msg.config(text="Wrong PIN")
+            except Exception: pass
+
     def refresh_ui(self):
         for widget in self.list_frame.winfo_children():
             widget.destroy()
@@ -1130,6 +1240,8 @@ class AgentApp:
             for job in solo_queued:
                 self._build_queue_row(job, num)
                 num += 1
+
+        self.update_lock()
 
     def _section_label(self, text, color):
         frame = tk.Frame(self.list_frame, bg=C["bg"], padx=20, pady=8)
