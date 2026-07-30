@@ -858,7 +858,33 @@ class AgentApp:
         except Exception as e:
             print(f"Error marking printing: {e}")
 
+    def _operator_name(self):
+        try:
+            return self.operator_var.get().strip()
+        except Exception:
+            return str(self.config.get("operator", "")).strip()
+
+    def _operator_ok(self):
+        """Require an operator name before printing."""
+        if self._operator_name():
+            return True
+        if getattr(self, "lock_win", None) is not None and getattr(self, "_lock_op_msg", None) is not None:
+            try:
+                self._lock_op_msg.config(text="⚠  Enter the operator name to print")
+                self._lock_op_entry.focus_set()
+            except Exception:
+                pass
+        else:
+            try:
+                messagebox.showwarning("Operator required",
+                                       "Enter the operator name before printing.", parent=self.root)
+            except Exception:
+                pass
+        return False
+
     def mark_printing(self, job_id):
+        if not self._operator_ok():
+            return
         already = self._duplicate_info(job_id)
         if not already:
             self._do_start(job_id)
@@ -1192,10 +1218,14 @@ class AgentApp:
         tk.Label(wrap, text="⛔  PRINT REQUIRED", font=("Segoe UI", 34, "bold"),
                  fg=C["red"], bg=C["bg"]).pack(pady=(0, 4))
         # Operator name (bound to the same var as the main window, so it syncs).
-        op = tk.Frame(wrap, bg=C["bg"]); op.pack(pady=(0, 16))
+        # Required before printing.
+        op = tk.Frame(wrap, bg=C["bg"]); op.pack(pady=(0, 2))
         tk.Label(op, text="OPERATOR:", font=("Segoe UI", 10, "bold"), fg=C["text2"], bg=C["bg"]).pack(side="left", padx=(0, 8))
-        tk.Entry(op, textvariable=self.operator_var, font=("Segoe UI", 12), width=26,
-                 bg=C["surface2"], fg=C["text"], insertbackground=C["text"], relief="flat").pack(side="left", ipady=5)
+        self._lock_op_entry = tk.Entry(op, textvariable=self.operator_var, font=("Segoe UI", 12), width=26,
+                                       bg=C["surface2"], fg=C["text"], insertbackground=C["text"], relief="flat")
+        self._lock_op_entry.pack(side="left", ipady=5)
+        self._lock_op_msg = tk.Label(wrap, text="", font=("Segoe UI", 10, "bold"), fg=C["red"], bg=C["bg"])
+        self._lock_op_msg.pack(pady=(0, 12))
 
         # Group queued jobs by nest so a nest needs only ONE Print (like the main UI:
         # the server's start_printing starts the whole nest from any member).
