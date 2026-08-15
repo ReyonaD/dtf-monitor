@@ -207,6 +207,7 @@ class HeartbeatRequest(BaseModel):
     machine_name: str
     watched_folder: str = ""
     operator: str = ""
+    agent_version: str = ""
     files: list[FileInfo] = []
 
 
@@ -290,7 +291,7 @@ def build_dashboard_state(warehouse: Optional[str] = None):
 async def heartbeat(req: HeartbeatRequest):
     upsert_machine(req.machine_id, req.machine_name, req.watched_folder, req.operator)
     sync_files_for_machine(req.machine_id, [f.model_dump() for f in req.files])
-    update_machine_heartbeat(req.machine_id)
+    update_machine_heartbeat(req.machine_id, req.agent_version)
 
     # Broadcast updated state to all dashboard clients
     state = build_dashboard_state()

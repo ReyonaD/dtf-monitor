@@ -29,7 +29,7 @@ DEFAULT_DPI = 300
 # Auto-update: the server advertises the latest version in each heartbeat reply.
 # When it's newer than this, the agent downloads the new exe and relaunches.
 # Bump this every time you ship a new agent build.
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 
 def _version_newer(a, b):
@@ -703,6 +703,7 @@ class AgentApp:
                 "machine_name": self.machine_name,
                 "watched_folder": self.watched_folder,
                 "operator": operator,
+                "agent_version": AGENT_VERSION,
                 "files": all_files,
             }
             resp = requests.post(f"{self.server_url}/api/heartbeat", json=payload, timeout=5)

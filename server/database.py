@@ -167,6 +167,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migration: add agent_version column to machines if missing
+    try:
+        conn.execute("ALTER TABLE machines ADD COLUMN agent_version TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -197,12 +204,18 @@ def upsert_machine(machine_id: str, name: str, watched_folder: str = "", operato
     conn.close()
 
 
-def update_machine_heartbeat(machine_id: str):
+def update_machine_heartbeat(machine_id: str, agent_version: str = ""):
     conn = get_connection()
-    conn.execute("""
-        UPDATE machines SET last_seen = datetime('now'), is_online = 1
-        WHERE id = ?
-    """, (machine_id,))
+    if agent_version:
+        conn.execute("""
+            UPDATE machines SET last_seen = datetime('now'), is_online = 1, agent_version = ?
+            WHERE id = ?
+        """, (agent_version, machine_id))
+    else:
+        conn.execute("""
+            UPDATE machines SET last_seen = datetime('now'), is_online = 1
+            WHERE id = ?
+        """, (machine_id,))
     conn.commit()
     conn.close()
 
