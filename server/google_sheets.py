@@ -48,8 +48,9 @@ def extract_order_code(filename: str) -> Optional[str]:
         '7--DWC1518 (1 x) ...' -> 'DWC1518'
         '94-1-MC2096 (3 x) ...' -> 'MC2096'
     """
-    # Find the part before (N x), then extract the last alphanumeric token
-    m = re.search(r'([A-Za-z]{1,4}\d+)\s*\(\d+\s*x\)', filename)
+    # Find the part before (N x), then extract the last alphanumeric token.
+    # Case-insensitive 'x' — UV files use '(1X)', DTF '(1x)'.
+    m = re.search(r'([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]\)', filename)
     if m:
         return m.group(1).upper()
     return None
