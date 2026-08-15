@@ -26,6 +26,28 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "confi
 SUPPORTED_EXTENSIONS = {".png", ".tiff", ".tif"}
 DEFAULT_DPI = 300
 
+# Auto-update: the server advertises the latest version in each heartbeat reply.
+# When it's newer than this, the agent downloads the new exe and relaunches.
+# Bump this every time you ship a new agent build.
+AGENT_VERSION = "1.1.0"
+
+
+def _version_newer(a, b):
+    """True if dotted-integer version string a is strictly newer than b."""
+    def parts(v):
+        out = []
+        for p in str(v or "").split("."):
+            try:
+                out.append(int(p))
+            except ValueError:
+                out.append(0)
+        return out
+    pa, pb = parts(a), parts(b)
+    n = max(len(pa), len(pb))
+    pa += [0] * (n - len(pa))
+    pb += [0] * (n - len(pb))
+    return pa > pb
+
 # Allow large DTF print files without Pillow warnings
 Image.MAX_IMAGE_PIXELS = None
 
@@ -627,6 +649,7 @@ class AgentApp:
         self.customer_files = []  # Customer files assigned to this machine
         self.connected = False
         self.running = True
+        self._updating = False  # guards the self-update from re-entry
         self.selected_job_ids = set()  # For nest selection
         self.active_tab = "queue"  # "queue", "history", or "customer_files"
         self.search_query = ""  # Search filter
@@ -691,6 +714,7 @@ class AgentApp:
             self.jobs = data.get("jobs", [])
             self.customer_files = data.get("customer_files", [])
             self.connected = True
+            self._check_update(data.get("latest_version"))
             return True
         except Exception as e:
             print(f"Heartbeat error: {e}")
@@ -709,6 +733,85 @@ class AgentApp:
                 "nest_group": None,
             } for f in self.local_files]
             return False
+
+    def _check_update(self, latest_version):
+        """If the server advertises a newer version, self-update. Only runs from
+        the packaged .exe and only once per process; fail-soft on any error."""
+        try:
+            if self._updating or not latest_version:
+                return
+            if not getattr(sys, "frozen", False):
+                return  # running as .py in dev — don't self-update
+            if not _version_newer(latest_version, AGENT_VERSION):
+                return
+            self._updating = True
+            threading.Thread(target=self._do_update, daemon=True).start()
+        except Exception as e:
+            print(f"Update check error: {e}")
+
+    def _do_update(self):
+        """Download the new exe next to us, write an updater batch that waits for
+        this process to release the exe, swaps it, and relaunches — then exit."""
+        try:
+            exe_path = os.path.abspath(sys.executable)
+            exe_dir = os.path.dirname(exe_path)
+            new_path = os.path.join(exe_dir, "DTF-Monitor-Agent.new.exe")
+            url = f"{self.server_url}/api/agent/download"
+
+            with requests.get(url, stream=True, timeout=180) as r:
+                if r.status_code != 200:
+                    self._updating = False
+                    return
+                with open(new_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1 << 16):
+                        if chunk:
+                            f.write(chunk)
+
+            # Sanity: a real PyInstaller onefile exe is tens of MB and starts 'MZ'.
+            if os.path.getsize(new_path) < 3_000_000:
+                os.remove(new_path)
+                self._updating = False
+                return
+            with open(new_path, "rb") as f:
+                if f.read(2) != b"MZ":
+                    os.remove(new_path)
+                    self._updating = False
+                    return
+
+            bat_path = os.path.join(exe_dir, "_update.bat")
+            bat = (
+                "@echo off\r\n"
+                "setlocal\r\n"
+                f'set "EXE={exe_path}"\r\n'
+                f'set "NEW={new_path}"\r\n'
+                "set /a tries=0\r\n"
+                ":waitloop\r\n"
+                'del "%EXE%" 2>nul\r\n'
+                'if not exist "%EXE%" goto swap\r\n'
+                "set /a tries+=1\r\n"
+                "if %tries% geq 60 goto fail\r\n"
+                "timeout /t 1 /nobreak >nul\r\n"
+                "goto waitloop\r\n"
+                ":swap\r\n"
+                'move /y "%NEW%" "%EXE%" >nul\r\n'
+                'start "" "%EXE%"\r\n'
+                "goto done\r\n"
+                ":fail\r\n"
+                'del "%NEW%" 2>nul\r\n'
+                'start "" "%EXE%"\r\n'
+                ":done\r\n"
+                'del "%~f0"\r\n'
+            )
+            with open(bat_path, "w") as f:
+                f.write(bat)
+
+            DETACHED = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            import subprocess
+            subprocess.Popen(["cmd", "/c", bat_path], creationflags=DETACHED, close_fds=True)
+            os._exit(0)  # release the exe so the batch can replace it
+        except Exception as e:
+            print(f"Update failed: {e}")
+            self._updating = False
 
     def fetch_history(self):
         """Fetch completed jobs for this machine from server."""

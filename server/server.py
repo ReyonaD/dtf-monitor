@@ -299,7 +299,8 @@ async def heartbeat(req: HeartbeatRequest):
     # Return current jobs for this machine (so agent can show them)
     jobs = get_jobs_for_machine(req.machine_id)
     cfiles = get_customer_files_for_machine(req.machine_id)
-    return {"status": "ok", "jobs": jobs, "customer_files": cfiles}
+    return {"status": "ok", "jobs": jobs, "customer_files": cfiles,
+            "latest_version": get_agent_version()}
 
 
 @app.post("/api/jobs/{job_id}/start")
@@ -966,6 +967,53 @@ async def customer_ws(ws: WebSocket):
             await ws.receive_text()
     except WebSocketDisconnect:
         customer_manager.disconnect(ws, customer_id)
+
+
+# ── Agent auto-update ──
+# The latest agent exe + its version live on the volume (next to the DB). Agents
+# learn the latest version from every heartbeat reply and pull the exe from the
+# public download endpoint. Admins push a new build via /api/agent/upload.
+_DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "dtf_monitor.db")
+AGENT_DIR = os.path.join(os.path.dirname(_DB_PATH), "agent")
+os.makedirs(AGENT_DIR, exist_ok=True)
+AGENT_EXE_PATH = os.path.join(AGENT_DIR, "DTF-Monitor-Agent.exe")
+AGENT_VERSION_FILE = os.path.join(AGENT_DIR, "version.txt")
+
+
+def get_agent_version():
+    try:
+        with open(AGENT_VERSION_FILE) as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+@app.get("/api/agent/version")
+async def agent_version():
+    return {"version": get_agent_version()}
+
+
+@app.get("/api/agent/download")
+async def agent_download():
+    if not os.path.isfile(AGENT_EXE_PATH):
+        return JSONResponse({"error": "no agent build uploaded"}, status_code=404)
+    return FileResponse(AGENT_EXE_PATH, filename="DTF-Monitor-Agent.exe",
+                        media_type="application/octet-stream")
+
+
+@app.post("/api/agent/upload")
+async def agent_upload(version: str = Form(...), file: UploadFile = File(...)):
+    """Admin-only (session-protected): publish a new agent build + version."""
+    data = await file.read()
+    if len(data) < 3_000_000 or data[:2] != b"MZ":
+        return JSONResponse({"error": "not a valid Windows .exe"}, status_code=400)
+    tmp = AGENT_EXE_PATH + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, AGENT_EXE_PATH)  # atomic swap so downloads never see a partial file
+    with open(AGENT_VERSION_FILE, "w") as f:
+        f.write(version.strip())
+    return {"status": "ok", "version": version.strip(), "size": len(data)}
 
 
 # ── Serve dashboard static files ──

@@ -67,6 +67,8 @@ PUBLIC_PATHS = {
     "/api/unnest",
     "/api/integrations/warehouse-split",  # API-key protected (OT_API_KEY), not session
     "/api/order-status",                  # agent duplicate-print check (read-only)
+    "/api/agent/download",                # agents pull the latest build (no session)
+    "/api/agent/version",                 # agents check the latest version
     "/login",
     "/favicon.ico",
     "/api/history",
