@@ -228,8 +228,15 @@ class RIPLogParser:
         file_list = []
         # Track which RIP entries have been consumed by nests
         consumed_rip = set()
+        # nest "Start Printing" index -> its assigned RIP member indices (in order)
+        nest_members = {}
 
-        # First pass: find all nests and mark their RIP members
+        # First pass: assign each nest its OWN RIP members (nearest unconsumed,
+        # scanning back). Marking them consumed stops the next nest from reusing
+        # them. The second pass emits exactly this assignment — previously it
+        # re-searched by proximity, so back-to-back nests double-counted the
+        # earlier nest's members and silently dropped the later nest's oldest
+        # files from the list entirely.
         for i, entry in enumerate(entries):
             if entry.get('block_type') != 'print' or not entry.get('is_nest'):
                 continue
@@ -248,6 +255,7 @@ class RIPLogParser:
                     break
             for idx in members:
                 consumed_rip.add(idx)
+            nest_members[i] = list(reversed(members))  # chronological order
 
         # Second pass: build file list from "Start Printing" entries only
         for i, entry in enumerate(entries):
@@ -255,27 +263,12 @@ class RIPLogParser:
                 continue
 
             if entry.get('is_nest'):
-                # Nest: find the RIP members for filenames
-                nest_count = entry['nest_count']
+                # Nest: emit exactly the members assigned in pass 1.
                 ts = entry.get('output_start', entry.get('output_end', str(i)))
                 nest_group = f"riplog_nest_{ts}"
                 nest_group = re.sub(r'[^a-zA-Z0-9_]', '_', nest_group)
 
-                # Look backwards for the RIP entries that belong to this nest
-                # Only take entries that were consumed in pass 1 (not standalone files)
-                members = []
-                for j in range(i - 1, -1, -1):
-                    if entries[j].get('block_type') != 'rip':
-                        continue
-                    if entries[j].get('is_nest'):
-                        continue
-                    if j not in consumed_rip:
-                        continue
-                    members.append(j)
-                    if len(members) == nest_count:
-                        break
-
-                for idx in reversed(members):
+                for idx in nest_members.get(i, []):
                     info = RIPLogParser._job_to_file_info(entries[idx])
                     if info:
                         info['nest_group'] = nest_group
