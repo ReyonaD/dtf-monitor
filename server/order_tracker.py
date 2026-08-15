@@ -42,9 +42,10 @@ def extract_order_code(filename: str) -> Optional[str]:
         '67--IN3300 (1 x) ...'  -> 'IN3300'
         '129-4-C15963 (2 x) ...' -> 'C15963'
         '7--DWC1518 (1 x) ...'  -> 'DWC1518'
-    The 'x' in the copies token is case-insensitive: UV files use '(1X)', DTF '(1x)'.
+    The 'x' in the copies token is case-insensitive and optional: UV files use
+    '(1X)', DTF '(1x)', and some files just '(1)'.
     """
-    m = re.search(r'([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]\)', filename)
+    m = re.search(r'([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]?\)', filename)
     if m:
         return m.group(1).upper()
     return None
