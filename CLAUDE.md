@@ -51,6 +51,43 @@ edited from the ⚙ icon. Browsing: rail = current folder's children with a back
 views; parses order code / (N-M) part / inch / (Nx) copies / customer from filenames; claim-lock
 (🔒); Print downloads via temp-link to the hot folder (copies dropped N times). Do NOT roll this
 into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the user says so.
+- **Queue tab** (added 2026-09) = this machine's work list, the operator's main screen. Stages
+  advance on their own: **Downloaded** (Print pressed → queue) → **RIP'd** (file name seen in
+  RIPLOG) → **Printed ✓** (oven camera read the sheet's QR). Stuck rows get an amber/red stripe
+  (Downloaded→RIP'd 30/60 min, RIP'd→Printed 45/90 min). Row menu: re-download / mark printed
+  (camera missed) / release / remove. Preview stores the queue in `queue.json` and simulates
+  the camera with a "Scan" box; the real agent keeps it server-side (heartbeat `jobs`).
+- **Selection/claim/queue are per SHEET** (file path), not per order: a 5-sheet order can be
+  split across machines (click one sheet = take just that one; click the order = all). Each
+  sheet is its own queue row and its own Printed ✓, so "who/which machine" is recorded per
+  sheet; OT rolls sheets up to the order (see Production-tracking design below).
+- **Printed sheets move to `<their folder>/BASILDI/`** on Dropbox (server `/api/dropbox/move`,
+  which creates the folder if missing, releases the claim and **records who printed it** —
+  `machine`/`operator` from the request — in the `dropbox_printed` SQLite table keyed by the
+  file's new path). `/api/dropbox/list` and `/search` return `printedBy {machine, operator, at}`
+  next to `claimedBy`, so **every PC's agent** shows "Printed · MACHINE · OPERATOR" on files
+  in BASILDI. The file name is NOT changed. A store folder = "still to print"; a partly
+  printed order shows only its remaining sheets plus a "✓ n/N printed" badge. The Download button is called **Download**
+  (it downloads to the hot folder; printing happens in Flexi) and shows a live progress bar.
+- Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
+  part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
+
+## Production-tracking design (agreed 2026-09, being built)
+Problem: RIPLOG ≠ printed. A downloaded file can never reach Flexi, and a RIP'd file can never
+be sent to the printer — both invisible to the agent. Design: **expected vs. actual**.
+- **GSB** stamps a Sheet ID (order + part/total, same string as the filename) as a **QR in the
+  non-transfer top margin** of every gang sheet. Per-shop toggle; owner's shops on.
+- **Order Tracker** = ledger of expected orders/sheets + **chase list** (due today, not through
+  the oven) + thresholds/alerts; DTF Monitor's wall dashboard shows the chase list.
+- **Agent** (printer PC): Queue as above. "Printing" is NOT a stage (RIP'd covers it).
+- **Oven checkpoint = a webcam fixed at the oven exit, USB into the printer PC, read by an
+  agent camera thread** (passive — the sheet passes under it, nobody has to remember to scan).
+  Tablet/hand scanner rejected. Fallbacks: hold sheet to camera / type the code. If reads are
+  flaky, swap for a fixed-mount 2D scanner in **USB-serial** mode (HID mode would type into
+  Flexi). Scan → `/api/scan` → server marks Printed, moves the Dropbox file to PRINTED, releases
+  the claim, forwards to OT.
+- Zero-code first step: point Flexi's **hot folder (auto-RIP)** at the agent's hot folder so the
+  "forgot to import into Flexi" step disappears (verify the Flexi edition supports it).
 
 ## Conventions & gotchas
 - **Deploy is `railway up`** (+ commit/push to GitHub). Committing only when the user asks.

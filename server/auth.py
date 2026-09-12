@@ -69,6 +69,12 @@ PUBLIC_PATHS = {
     "/api/order-status",                  # agent duplicate-print check (read-only)
     "/api/agent/download",                # agents pull the latest build (no session)
     "/api/agent/version",                 # agents check the latest version
+    "/api/dropbox/list",                  # agent Print-Files: browse Dropbox
+    "/api/dropbox/search",                # agent Print-Files: search all of PRODUCTION
+    "/api/dropbox/temp-link",             # agent Print-Files: download a file
+    "/api/dropbox/move",                  # agent Print-Files: move a printed file
+    "/api/dropbox/claim",                 # agent Print-Files: lock a file being printed
+    "/api/dropbox/release",               # agent Print-Files: unlock a file
     "/login",
     "/favicon.ico",
     "/api/history",

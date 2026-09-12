@@ -160,6 +160,17 @@ def init_db():
         )
     """)
 
+    # Dropbox files moved to a BASILDI folder and who printed them (shown to every agent)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dropbox_printed (
+            path_lower TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            machine TEXT DEFAULT '',
+            operator TEXT DEFAULT '',
+            printed_at TEXT NOT NULL
+        )
+    """)
+
     # Migration: add machine_type column to machines if missing
     try:
         conn.execute("ALTER TABLE machines ADD COLUMN machine_type TEXT DEFAULT ''")
@@ -1012,6 +1023,37 @@ def extract_store_code(filename: str) -> str:
     if override:
         return override
     return "UNRECOGNIZED"
+
+
+# ── Dropbox printed registry: who printed a file (keyed by its BASILDI path) ──
+
+def record_dropbox_printed(path: str, machine: str = "", operator: str = ""):
+    conn = get_connection()
+    conn.execute("""
+        INSERT OR REPLACE INTO dropbox_printed (path_lower, path, machine, operator, printed_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (path.lower(), path, machine or "", operator or "",
+          datetime.now().isoformat(timespec="seconds")))
+    conn.commit()
+    conn.close()
+
+
+def get_dropbox_printed(paths) -> dict:
+    """{path_lower: {machine, operator, at}} for the given Dropbox paths (case-insensitive)."""
+    keys = [p.lower() for p in paths if p]
+    if not keys:
+        return {}
+    conn = get_connection()
+    out = {}
+    for i in range(0, len(keys), 500):  # stay under SQLite's variable limit
+        chunk = keys[i:i + 500]
+        rows = conn.execute(
+            "SELECT path_lower, machine, operator, printed_at FROM dropbox_printed WHERE path_lower IN (%s)"
+            % ",".join("?" * len(chunk)), chunk)
+        for r in rows:
+            out[r["path_lower"]] = {"machine": r["machine"], "operator": r["operator"], "at": r["printed_at"]}
+    conn.close()
+    return out
 
 
 def get_store_override(filename: str) -> Optional[str]:

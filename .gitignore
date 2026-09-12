@@ -42,3 +42,7 @@ agent/DTF-Monitor-Agent.exe
 
 # Order Tracker integration key (local secret)
 server/ot_config.json
+
+# Print-Files preview local state
+agent/ui_preview/agent_config.json
+agent/ui_preview/queue.json

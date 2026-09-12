@@ -27,6 +27,7 @@ from database import get_all_machines, get_jobs_for_machine, get_all_active_jobs
 from database import search_jobs, get_completed_jobs, get_daily_stats, get_report, get_report_details, get_store_report
 from database import get_unrecognized_files, set_store_override, KNOWN_STORE_CODES
 from database import get_store_cell_details
+from database import record_dropbox_printed, get_dropbox_printed
 from database import create_nest, unnest, start_nest_printing, complete_nest
 from database import get_job_by_id, get_jobs_by_nest, delete_machine
 from database import update_machine_warehouse, update_machine_type, get_warehouses, create_warehouse, delete_warehouse
@@ -42,6 +43,7 @@ from database import (
 )
 # Order Tracker integration (replaces the old Google Sheets writer).
 from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status
+import dropbox_service as dbx
 
 logger = logging.getLogger(__name__)
 
@@ -1015,6 +1017,106 @@ async def agent_upload(version: str = Form(...), file: UploadFile = File(...)):
     with open(AGENT_VERSION_FILE, "w") as f:
         f.write(version.strip())
     return {"status": "ok", "version": version.strip(), "size": len(data)}
+
+
+# ── Dropbox (agent Print-Files) ──
+# Token lives only here; agents call these. Listings are cached in the service.
+def _decorate_entries(entries):
+    """Attach what every agent should see on a Dropbox file: who has it claimed
+    (🔒, in-memory, TTL) and who printed it (BASILDI registry, persistent)."""
+    claims = dbx.active_claims()
+    printed = get_dropbox_printed([e.get("path") for e in entries])
+    out = []
+    for e in entries:
+        e2 = dict(e)
+        c = claims.get(e.get("path"))
+        if c:
+            e2["claimedBy"] = {"machine": c["machine"], "operator": c["operator"]}
+        pr = printed.get((e.get("path") or "").lower())
+        if pr:
+            e2["printedBy"] = pr
+        out.append(e2)
+    return out
+
+
+@app.get("/api/dropbox/list")
+async def dropbox_list(path: Optional[str] = Query(None), fresh: Optional[int] = Query(0)):
+    if not dbx.configured():
+        return JSONResponse({"status": "error", "message": "Dropbox not configured"}, status_code=503)
+    p = path or dbx.DBX_ROOT_PATH
+    try:
+        entries = dbx.list_folder(p, use_cache=not fresh)
+        return {"status": "ok", "path": p, "entries": _decorate_entries(entries)}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+@app.get("/api/dropbox/search")
+async def dropbox_search(q: Optional[str] = Query(None)):
+    if not dbx.configured():
+        return JSONResponse({"status": "error", "message": "Dropbox not configured"}, status_code=503)
+    query = (q or "").strip()
+    if len(query) < 2:
+        return {"status": "ok", "query": query, "entries": []}
+    try:
+        return {"status": "ok", "query": query, "entries": _decorate_entries(dbx.search(query))}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+@app.post("/api/dropbox/claim")
+async def dropbox_claim(req: Request):
+    body = await req.json()
+    path = (body or {}).get("path")
+    if not path:
+        return JSONResponse({"status": "error", "message": "path required"}, status_code=400)
+    dbx.claim(path, (body or {}).get("machine", ""), (body or {}).get("operator", ""))
+    return {"status": "ok"}
+
+
+@app.post("/api/dropbox/release")
+async def dropbox_release(req: Request):
+    body = await req.json()
+    path = (body or {}).get("path")
+    if not path:
+        return JSONResponse({"status": "error", "message": "path required"}, status_code=400)
+    dbx.release(path)
+    return {"status": "ok"}
+
+
+@app.post("/api/dropbox/temp-link")
+async def dropbox_temp_link(req: Request):
+    body = await req.json()
+    path = (body or {}).get("path")
+    if not path:
+        return JSONResponse({"status": "error", "message": "path required"}, status_code=400)
+    try:
+        return {"status": "ok", "link": dbx.temp_link(path)}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+@app.post("/api/dropbox/move")
+async def dropbox_move(req: Request):
+    body = await req.json()
+    frm = (body or {}).get("from")
+    to = (body or {}).get("to")
+    if not frm or not to:
+        return JSONResponse({"status": "error", "message": "from/to required"}, status_code=400)
+    try:
+        try:
+            result = dbx.move(frm, to)
+        except Exception:
+            # target folder may not exist yet (first printed sheet in a store folder)
+            dbx.ensure_folder(to.rsplit("/", 1)[0])
+            result = dbx.move(frm, to)
+        dbx.release(frm)  # printed & moved — claim no longer needed
+        # remember who printed it, keyed by where the file now lives (autorename may alter it)
+        moved_path = ((result or {}).get("metadata") or {}).get("path_display") or to
+        record_dropbox_printed(moved_path, (body or {}).get("machine", ""), (body or {}).get("operator", ""))
+        return {"status": "ok", "result": result, "path": moved_path}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
 
 
 # ── Serve dashboard static files ──

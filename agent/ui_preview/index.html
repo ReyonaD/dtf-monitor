@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DTF Monitor Agent — Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#08080a; --panel:#0e0e11; --surface:#141419; --surface2:#1b1b22; --surface3:#23232c;
+    --border:#26262e; --border2:#34343f; --text:#F1F0EA; --muted:#8b8b97; --faint:#5a5a66;
+    --accent:#8b5cf6; --accent-soft:#a78bfa; --accent-dim:rgba(139,92,246,.16);
+    --ready:#34d399; --ready-dim:rgba(52,211,153,.14); --warn:#fbbf24; --warn-dim:rgba(251,191,36,.14);
+    --sheets:#f0a020; --uv:#38bdf8; --uv-dim:rgba(56,189,248,.14);
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --ease-out:cubic-bezier(.23,1,.32,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow:hidden}
+  .window{width:100%;height:100vh;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+  .titlebar{flex:none;display:flex;align-items:center;gap:14px;padding:12px 16px;background:linear-gradient(180deg,#131318,#0e0e12);border-bottom:1px solid var(--border);}
+  .logo{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--accent-soft),var(--accent));box-shadow:0 4px 14px -4px var(--accent);}
+  .appname{font-weight:700;font-size:14px;letter-spacing:.2px}
+  .appname small{display:block;font-weight:500;font-size:11px;color:var(--faint);letter-spacing:.3px}
+  .spacer{flex:1}
+  .chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--muted);white-space:nowrap}
+  .chip b{color:var(--text);font-weight:600}
+  .machine{font-family:var(--mono);font-weight:600;color:var(--accent-soft);letter-spacing:.4px}
+  .gear{appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--muted);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;margin-left:6px;transition:background .14s var(--ease-out),color .14s var(--ease-out),border-color .14s var(--ease-out),transform .3s var(--ease-out)}
+  @media(hover:hover){.gear:hover{background:var(--accent-dim);color:var(--accent-soft);border-color:rgba(139,92,246,.4);transform:rotate(60deg)}}
+  .gear:active{transform:scale(.92)}
+  .modal{position:fixed;inset:0;background:rgba(4,4,7,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:50;animation:fade .16s var(--ease-out)}
+  .modal[hidden]{display:none}
+  @keyframes fade{from{opacity:0}}
+  .sheet{width:min(560px,92vw);max-height:88vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border2);border-radius:16px;box-shadow:0 30px 80px -20px rgba(0,0,0,.8);overflow:hidden;animation:pop .2s var(--ease-out)}
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}}
+  .sheet-h{display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border);font-size:15px}
+  .sheet-h b{flex:1}
+  .sheet-x{appearance:none;border:0;background:var(--surface2);color:var(--muted);width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:12px}
+  @media(hover:hover){.sheet-x:hover{background:var(--surface3);color:var(--text)}}
+  .sheet-b{padding:16px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+  .grp{font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--faint);margin-top:6px}
+  .grp:first-child{margin-top:0}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld>span{font-size:12.5px;color:var(--muted);font-weight:500}
+  .fld>span small{color:var(--faint);font-weight:400}
+  .fld input{all:unset;box-sizing:border-box;width:100%;height:38px;padding:0 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-family:var(--mono);font-size:12.5px;color:var(--text)}
+  .fld input:focus{border-color:var(--accent)}
+  .fld-row{display:flex;gap:8px}
+  .fld-row input{flex:1}
+  .browse{appearance:none;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:var(--ui);font-size:12px;font-weight:600;padding:0 14px;border-radius:9px;cursor:pointer;white-space:nowrap}
+  @media(hover:hover){.browse:hover{background:var(--surface3);color:var(--text);border-color:var(--border2)}}
+  .browse:active{transform:scale(.96)}
+  .sheet-f{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--border)}
+  .savemsg{flex:1;font-size:12px;color:var(--ready)}
+  .btn-ghost{appearance:none;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--ui);font-size:13px;font-weight:600;height:38px;padding:0 18px;border-radius:9px;cursor:pointer}
+  @media(hover:hover){.btn-ghost:hover{color:var(--text);border-color:var(--border2)}}
+  .btn-primary{appearance:none;border:0;background:linear-gradient(135deg,var(--accent-soft),var(--accent));color:#fff;font-family:var(--ui);font-size:13px;font-weight:700;height:38px;padding:0 22px;border-radius:9px;cursor:pointer;box-shadow:0 8px 20px -8px var(--accent)}
+  .btn-primary:active{transform:scale(.97)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ready);box-shadow:0 0 0 3px var(--ready-dim)}
+  .tabs{flex:none;display:flex;gap:2px;padding:0 12px;background:#0c0c10;border-bottom:1px solid var(--border)}
+  .tab{appearance:none;background:none;border:0;cursor:pointer;font-family:var(--ui);color:var(--muted);font-size:13px;font-weight:600;padding:13px 16px 12px;border-bottom:2px solid transparent;display:flex;align-items:center;gap:8px}
+  .tab .cnt{font-family:var(--mono);font-size:11px;color:var(--faint);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 7px}
+  .tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+  .tab[aria-selected="true"] .cnt{color:var(--accent-soft);background:var(--accent-dim);border-color:transparent}
+  .stage{flex:1;min-height:0}
+  .tabpanel{height:100%}
+  .tabpanel[hidden]{display:none}
+  .toolbar{flex:none;display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border)}
+  .crumb{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .crumb b{color:var(--text);font-weight:600}.crumb .sep{color:var(--faint)}
+  .cseg{cursor:pointer}.cseg:hover{color:var(--text)}.cseg:last-child{color:var(--text);font-weight:600}
+  .search{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;width:280px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--faint)}
+  .search:focus-within{border-color:var(--accent);color:var(--accent-soft)}
+  .search input{all:unset;flex:1;font-family:var(--ui);font-size:12.5px;color:var(--text);min-width:0}
+  .search input::placeholder{color:var(--faint)}
+  .searchx{appearance:none;border:0;background:var(--surface3);color:var(--muted);width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:10px;line-height:1;display:grid;place-items:center;flex:none}
+  @media(hover:hover){.searchx:hover{background:var(--accent);color:#fff}}
+  .qloc{font-size:11px;color:var(--accent-soft);font-weight:600;display:flex;align-items:center;gap:5px;margin-top:-2px}
+  .loc{margin-left:8px;font-size:11px;color:var(--accent-soft);font-weight:600}
+  #crumbBack{cursor:pointer;color:var(--accent-soft);font-weight:600}
+  .code{font-family:var(--mono);font-weight:700;font-size:12.5px;color:var(--accent-soft);background:var(--accent-dim);padding:2px 8px;border-radius:6px;letter-spacing:.3px}
+  .status{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px}
+  .status .sd{width:6px;height:6px;border-radius:50%}
+  .status.ready{color:var(--ready);background:var(--ready-dim)}.status.ready .sd{background:var(--ready)}
+  .status.printed{color:var(--ready);background:var(--ready-dim)}.status.printed .sd{background:var(--ready)}
+  .status.printing{color:var(--warn);background:var(--warn-dim)}.status.printing .sd{background:var(--warn);animation:pulse 1.1s infinite}
+  .status.done{color:var(--ready);background:var(--ready-dim)}.status.done .sd{background:var(--ready)}
+  @keyframes pulse{50%{opacity:.35}}
+  .actionbar{flex:none;margin-top:auto;display:flex;align-items:center;gap:16px;padding:14px 18px;border-top:1px solid rgba(255,255,255,.06);background:rgba(12,12,16,.72);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
+  .selinfo{font-size:13px;color:var(--muted)}.selinfo b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}.selinfo .sh{color:var(--sheets)}
+  .target{font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .target code{font-family:var(--mono);color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .target[hidden]{display:none}
+  .dlprog{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+  .dlprog[hidden]{display:none}
+  .dlbar{flex:1;height:6px;border-radius:4px;background:var(--surface3);overflow:hidden;min-width:120px}
+  .dlbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-soft),var(--accent));transition:width .2s linear}
+  .dltxt{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis}
+  .dltxt b{color:var(--text)}
+  .print{margin-left:auto;appearance:none;border:0;cursor:pointer;font-family:var(--ui);display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 26px;border-radius:11px;font-size:15px;font-weight:700;color:#fff;letter-spacing:.2px;background:linear-gradient(135deg,var(--accent-soft),var(--accent));box-shadow:0 12px 26px -10px var(--accent);transition:transform .14s var(--ease-out),filter .12s}
+  .print:hover:not(:disabled){filter:brightness(1.07)}.print:active:not(:disabled){transform:scale(.97)}
+  .print:disabled{background:var(--surface2);color:var(--faint);box-shadow:none;cursor:not-allowed}
+  .print .n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  :focus-visible{outline:2px solid var(--accent-soft);outline-offset:2px}
+  .viewtoggle{display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:2px}
+  .vtbtn{appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;height:28px;padding:0 12px;border-radius:7px;font-family:var(--ui);font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;transition:background .14s var(--ease-out),color .14s var(--ease-out)}
+  .vtbtn:active{transform:scale(.97)}
+  .vtbtn[data-active]{background:var(--accent-dim);color:var(--accent-soft)}
+  .refbtn{appearance:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--surface);border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:background .14s var(--ease-out),color .14s var(--ease-out),border-color .14s var(--ease-out)}
+  @media(hover:hover){.refbtn:hover{background:var(--accent-dim);color:var(--accent-soft);border-color:rgba(139,92,246,.4)}}
+  .refbtn:active{transform:scale(.93)}
+  .refbtn.spin svg{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .freshts{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums;min-width:56px}
+  .body{display:grid;grid-template-columns:236px 1fr;height:100%;min-height:0;overflow:hidden}
+  .rail{background:#0b0b0e;border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto;min-height:0}
+  .rail-h{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--faint);padding:6px 10px 10px}
+  .folder{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;border:1px solid transparent;transition:background .14s var(--ease-out),color .14s var(--ease-out),transform .12s var(--ease-out)}
+  @media (hover:hover) and (pointer:fine){.folder:hover{background:var(--surface);color:var(--text)}}
+  .folder:active{transform:scale(.99)}
+  .folder .fi{width:16px;flex:none;color:var(--faint)}
+  .folder .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .folder.active{background:var(--accent-dim);color:var(--text);border-color:rgba(139,92,246,.35)}
+  .folder.active .fi{color:var(--accent-soft)}
+  .folder.uvfolder .fi{color:var(--uv)}
+  .railcats{display:flex;flex-wrap:wrap;gap:5px;padding:2px 4px 12px;border-bottom:1px solid var(--border);margin-bottom:10px}
+  .catpill{appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:var(--ui);font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:background .14s var(--ease-out),color .14s var(--ease-out),border-color .14s var(--ease-out)}
+  @media(hover:hover){.catpill:hover{color:var(--text);border-color:var(--border2)}}
+  .catpill:active{transform:scale(.95)}
+  .catpill.active{background:var(--accent-dim);color:var(--accent-soft);border-color:rgba(139,92,246,.4)}
+  .catpill.uv.active{color:var(--uv);background:var(--uv-dim);border-color:rgba(56,189,248,.4)}
+  .raillabel{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);padding:0 10px 8px}
+  .main{display:flex;flex-direction:column;background:linear-gradient(180deg,#0d0d11,#0a0a0d);height:100%;min-height:0;min-width:0;overflow:hidden}
+  .filescroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0}
+  /* folder tiles (navigate into subfolders) */
+  .ftiles{display:flex;flex-wrap:wrap;gap:10px;padding:16px 18px 6px}
+  .ftile{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-family:var(--ui);font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .14s var(--ease-out),background .14s var(--ease-out),transform .12s var(--ease-out)}
+  @media(hover:hover){.ftile:hover{border-color:var(--border2);background:var(--surface2)}}
+  .ftile:active{transform:scale(.98)}
+  .ftile .far{color:var(--faint)}
+  .ogrid{display:flex;flex-wrap:wrap;gap:14px;padding:16px 18px}
+  .qcard{flex:1 1 calc((100% - 28px)/3);max-width:calc((100% - 28px)/3);min-width:0;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--bar,var(--accent));border-radius:11px;padding:13px 14px;cursor:pointer;display:flex;flex-direction:column;gap:9px;transition:border-color .16s var(--ease-out),background .16s var(--ease-out),box-shadow .16s var(--ease-out),transform .14s var(--ease-out)}
+  @media(hover:hover){.qcard:hover{border-color:var(--border2)}}
+  .qcard:active{transform:scale(.99)}
+  .qcard.sel{border-color:var(--accent);border-left-color:var(--accent);background:rgba(139,92,246,.07);box-shadow:0 0 0 1px var(--accent)}
+  .qcard.locked{opacity:.42}
+  .qcard.locked.sel{opacity:.72}
+  .qtop{display:flex;align-items:baseline;gap:8px}
+  .qcode{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--text);letter-spacing:.3px}
+  .qright{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .qmulti{color:var(--sheets);font-weight:600}
+  .qcust{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qsheets{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--border);padding-top:8px}
+  .qs{display:flex;align-items:center;gap:9px;padding:2px 0;font-family:var(--mono);font-size:11.5px}
+  .qsp{color:var(--faint);width:42px}.qsi{color:var(--text);font-variant-numeric:tabular-nums}
+  /* per-sheet selection: a multi-sheet order can be split across machines */
+  .qs{cursor:pointer;border-radius:6px;padding:3px 6px;margin:0 -6px;border:1px solid transparent;transition:background .12s var(--ease-out),border-color .12s var(--ease-out)}
+  @media(hover:hover){.qs:hover{background:var(--surface2)}}
+  .qs .qsel{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--border2);display:grid;place-items:center;font-size:9px;font-weight:800;color:transparent;flex:none}
+  .qs.on{background:var(--accent-dim);border-color:rgba(139,92,246,.35)}
+  .qs.on .qsel{background:var(--accent);border-color:var(--accent);color:#fff}
+  .qs.lk{opacity:.45}
+  .qcard.part{border-color:var(--accent);box-shadow:0 0 0 1px rgba(139,92,246,.5)}
+  .dchip{cursor:pointer}
+  .dchip.on{border-color:var(--accent);background:var(--accent-dim)}
+  .dchip.on .dp{color:var(--accent-soft)}
+  .row.part{box-shadow:inset 3px 0 0 var(--accent-soft)}
+  .row.part .dcheck{background:var(--accent-soft);border-color:var(--accent-soft);color:#fff}
+  .cx{font-family:var(--ui);font-size:9.5px;font-weight:800;color:#1a1206;background:var(--sheets);padding:1px 6px;border-radius:5px}
+  .quv{margin-left:auto;font-family:var(--ui);font-size:9.5px;font-weight:700;color:var(--uv);background:var(--uv-dim);padding:1px 6px;border-radius:5px}
+  .qfoot{display:flex;align-items:center;gap:8px}
+  .qaway{margin-left:auto;font-size:10.5px;color:var(--uv)}
+  .dhead,.row{display:grid;grid-template-columns:22px 88px minmax(120px,1fr) 116px auto 84px;align-items:center;gap:14px;padding:0 18px}
+  .dhead{height:34px;position:sticky;top:0;background:#0c0c10;border-bottom:1px solid var(--border);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);z-index:1}
+  .row{min-height:52px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s var(--ease-out)}
+  @media(hover:hover){.row:hover{background:rgba(255,255,255,.02)}}
+  .row.sel{background:var(--accent-dim);box-shadow:inset 3px 0 0 var(--accent)}
+  .row.locked{opacity:.42}
+  .row.locked.sel{opacity:.72}
+  .dcheck{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border2);background:var(--surface);display:grid;place-items:center;color:transparent;font-size:11px;font-weight:800}
+  .row.sel .dcheck{background:var(--accent);border-color:var(--accent);color:#fff}
+  .dcode{font-family:var(--mono);font-weight:700;font-size:12.5px;color:var(--accent-soft)}
+  .dcust{font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dmod{justify-self:end;font-family:var(--mono);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dsheets{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+  .dchip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px 10px}
+  .dchip .dp{color:var(--faint);font-size:11px}
+  .dchip .di{color:var(--text);font-weight:700;font-size:13.5px;font-variant-numeric:tabular-nums}
+  .dchip.lk{background:var(--warn-dim);border-color:rgba(251,191,36,.35)}
+  .dchip.lk .di{color:var(--warn);font-size:11.5px}
+  .row .status{justify-self:end}
+  .pane{position:relative;display:flex;flex-direction:column;height:100%;background:linear-gradient(180deg,#0d0d11,#0a0a0d)}
+  /* ── Queue: this machine's work list (Downloaded → RIP'd → Printed ✓) ── */
+  .qstats{display:flex;gap:6px}
+  .qstat{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--muted);white-space:nowrap}
+  .qstat b{color:var(--text);font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .sdot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .s-dl{background:var(--muted)}.s-rip{background:var(--accent-soft)}.s-ok{background:var(--ready)}
+  .scanbox{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 12px;width:380px;background:var(--surface);border:1px dashed var(--border2);border-radius:9px;color:var(--faint)}
+  .scanbox:focus-within{border-color:var(--accent)}
+  .scanbox input{all:unset;flex:1;font-family:var(--mono);font-size:12px;color:var(--text);min-width:0}
+  .scanbox input::placeholder{color:var(--faint);font-family:var(--ui)}
+  .scanbox .browse{height:26px;padding:0 10px;font-size:11px}
+  .qlist{flex:1;min-height:0;overflow:auto;padding:0 0 12px}
+  .qsec{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;padding:12px 18px 8px;background:#0c0c10;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
+  .qsec b{color:var(--muted);font-family:var(--mono);font-weight:600}
+  .qr{position:relative;display:grid;grid-template-columns:26px 150px minmax(120px,1fr) 104px minmax(220px,auto) 34px;align-items:center;gap:14px;min-height:56px;padding:0 18px;border-bottom:1px solid var(--border);transition:background .12s var(--ease-out)}
+  @media(hover:hover){.qr:hover{background:rgba(255,255,255,.02)}}
+  .qr.warn{box-shadow:inset 3px 0 0 var(--warn)}
+  .qr.late{box-shadow:inset 3px 0 0 #ef4444}
+  .qr.done{opacity:.55}
+  @media(hover:hover){.qr.done:hover{opacity:.9}}
+  .qicon{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;border:1.5px solid var(--border2);color:var(--faint)}
+  .qr.rip .qicon{border-color:var(--accent);color:var(--accent-soft);background:var(--accent-dim)}
+  .qr.done .qicon{border-color:var(--ready);background:var(--ready);color:#06231a}
+  .qcode2{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--text);display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+  .qcode2 small{font-weight:600;font-size:11px;color:var(--faint)}
+  .qmeta{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;min-width:0}
+  .qmeta>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qmeta .in{font-family:var(--mono);color:var(--text);flex:none}
+  .stagechip{justify-self:start;font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .qr.dl .stagechip{color:var(--muted);background:var(--surface2);border:1px solid var(--border)}
+  .qr.rip .stagechip{color:var(--accent-soft);background:var(--accent-dim)}
+  .qr.done .stagechip{color:var(--ready);background:var(--ready-dim)}
+  .qmsg{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .qr.warn .qmsg{color:var(--warn)}.qr.late .qmsg{color:#f87171;font-weight:600}
+  .qmsg .cp{font-family:var(--mono);color:var(--text)}
+  .qmore{appearance:none;border:1px solid transparent;background:transparent;color:var(--faint);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;justify-self:end}
+  @media(hover:hover){.qmore:hover{background:var(--surface2);color:var(--text);border-color:var(--border)}}
+  .qpop{position:absolute;right:16px;top:calc(100% - 8px);z-index:5;min-width:250px;background:var(--panel);border:1px solid var(--border2);border-radius:10px;box-shadow:0 18px 40px -12px rgba(0,0,0,.8);padding:5px;display:flex;flex-direction:column;animation:pop .14s var(--ease-out)}
+  .qpop button{appearance:none;border:0;background:transparent;color:var(--text);font-family:var(--ui);font-size:12.5px;text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer}
+  @media(hover:hover){.qpop button:hover{background:var(--surface2)}}
+  .qpop button.danger{color:#f87171}
+  .qpop .hint{font-size:10.5px;color:var(--faint);padding:4px 10px 6px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:320px}
+  .qempty{padding:40px 18px;color:var(--faint);font-size:13px;line-height:1.7;max-width:560px}
+  .qempty b{color:var(--muted)}
+  .camline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}.camline b{color:var(--text)}
+  .camdot{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px var(--warn-dim);flex:none}
+  .flash{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(6,35,26,.93);color:#fff;animation:fade .12s var(--ease-out)}
+  .flash[hidden]{display:none}
+  .flash.warn{background:rgba(70,50,6,.94)}.flash.bad{background:rgba(70,14,14,.94)}
+  .flash .fx{text-align:center}
+  .flash .big{font-family:var(--mono);font-weight:800;font-size:46px;letter-spacing:.5px}
+  .flash .big small{font-size:22px;font-weight:700;opacity:.75;margin-left:12px}
+  .flash .sub{margin-top:10px;font-size:16px;font-weight:600;opacity:.9}
+  .qsum{margin-left:auto;display:flex;gap:8px}
+  .scroll{flex:1;min-height:0;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+  .qgroup{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .qgroup.printing{border-color:rgba(251,191,36,.45)}
+  .qghead{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12.5px;color:var(--muted)}
+  .qghead b{color:var(--text);font-weight:600}.qghead .status{margin-left:auto}
+  .prog{height:4px;background:var(--surface3)}.prog i{display:block;height:100%;background:var(--warn)}
+  .qrow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--border)}
+  .qrow .qi{font-family:var(--mono);font-size:11px;color:var(--faint);width:30px;flex:none}
+  .qrow .qin{font-family:var(--mono);font-size:12px;color:var(--text);width:46px;flex:none}
+  .qrow .qf{font-family:var(--mono);font-size:10.5px;color:var(--faint);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lockline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--warn)}.lockline b{color:var(--text)}
+  .tablewrap{flex:1;min-height:0;overflow:auto}
+  table.h{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+  table.h th{position:sticky;top:0;background:#0c0c10;text-align:left;color:var(--faint);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;padding:11px 16px;border-bottom:1px solid var(--border);z-index:1}
+  table.h td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--muted);white-space:nowrap}
+  td.t{font-family:var(--mono);color:var(--muted);font-size:11.5px}
+  td.mono{font-family:var(--mono);color:var(--text)}
+  td.num{font-family:var(--mono);text-align:right;color:var(--text)}
+  td .op{color:var(--text);font-weight:600}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  @media (max-width:1050px){.qcard{flex-basis:calc((100% - 14px)/2)!important;max-width:calc((100% - 14px)/2)!important}}
+  @media (max-width:760px){.body{grid-template-columns:1fr}.rail{display:none}.qcard{flex-basis:100%!important;max-width:100%!important}}
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="logo">D</div>
+    <div class="appname">DTF Monitor Agent<small>v1.3.0-dev · local preview (real Dropbox)</small></div>
+    <button class="gear" id="gearBtn" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <div class="spacer"></div>
+    <div class="chip"><span class="dot"></span> Machine <b class="machine" id="mMachine">—</b></div>
+    <div class="chip">Operator <b id="mOperator">—</b></div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue <span class="cnt">0</span></button>
+    <button class="tab" role="tab" data-tab="history" aria-selected="false">History <span class="cnt">148</span></button>
+    <button class="tab" role="tab" data-tab="files" aria-selected="true">🖨 Print Files</button>
+  </div>
+  <div class="stage">
+    <div class="tabpanel" id="p-files">
+      <div class="body">
+        <nav class="rail"><div class="rail-h" id="railHead">DROPBOX · PRODUCTION</div><div id="railfolders"></div></nav>
+        <!-- rail content is rendered dynamically: category pills + persistent folder list -->
+        <div class="main">
+          <div class="toolbar">
+            <div class="crumb" id="crumb"></div>
+            <div class="viewtoggle"><button class="vtbtn" data-view="grid" data-active>▦ Grid</button><button class="vtbtn" data-view="list">☰ List</button></div>
+            <button class="refbtn" id="refBtn" title="Refresh (Dropbox)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+            <span class="freshts" id="freshts"></span>
+            <div class="spacer" style="flex:1"></div>
+            <div class="search">🔎<input id="searchInput" placeholder="Search all of PRODUCTION — order no / name…"><button class="searchx" id="searchClear" hidden>✕</button></div>
+          </div>
+          <div class="filescroll" id="grid"></div>
+          <div class="actionbar">
+            <div class="selinfo"><b id="ordN">0</b> orders · <b class="sh" id="shN">0</b> sheets to print</div>
+            <div class="target" id="target">→ hot folder <code id="hotpath">…</code></div>
+            <div class="dlprog" id="dlprog" hidden><div class="dlbar"><i id="dlfill"></i></div><span class="dltxt" id="dltxt"></span></div>
+            <button class="print" id="printBtn" disabled>⬇ Download <span class="n">0</span> sheets</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tabpanel" id="p-queue" hidden>
+      <div class="pane">
+        <div class="toolbar">
+          <div class="crumb"><b>Queue</b> · this machine</div>
+          <div class="qstats"><span class="qstat"><i class="sdot s-dl"></i> Downloaded <b id="qsDl">0</b></span><span class="qstat"><i class="sdot s-rip"></i> RIP'd <b id="qsRip">0</b></span><span class="qstat"><i class="sdot s-ok"></i> Printed today <b id="qsDone">0</b></span></div>
+          <div class="spacer" style="flex:1"></div>
+          <div class="scanbox" title="Preview: stands in for the oven camera">📷<input id="scanInput" placeholder="Simulate oven-camera read — e.g. PRO3956 (2-5)"><button class="browse" id="scanBtn">Scan</button></div>
+        </div>
+        <div class="qlist" id="qlist"></div>
+        <div class="actionbar">
+          <div class="camline"><span class="camdot"></span><span><b>Oven camera</b> · preview mode (reads come from the box above) · RIPLOG <span id="ripState">not configured</span></span></div>
+          <div class="spacer" style="flex:1"></div>
+          <button class="btn-ghost" id="clearDone">Clear printed</button>
+        </div>
+        <div class="flash" id="scanFlash" hidden><div class="fx"><div class="big"></div><div class="sub"></div></div></div>
+      </div>
+    </div>
+    <div class="tabpanel" id="p-history" hidden>
+      <div class="pane">
+        <div class="toolbar"><div class="crumb"><b>History</b> · this machine</div><div class="qsum"><span class="chip">Today <b>26 jobs</b></span></div></div>
+        <div class="tablewrap"><table class="h"><thead><tr><th>Time</th><th>Order</th><th>File</th><th>Operator</th><th style="text-align:right">Inches</th><th>Status</th></tr></thead><tbody id="hbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="settings" hidden>
+    <div class="sheet">
+      <div class="sheet-h"><b>⚙ Settings</b><button class="sheet-x" id="setClose" title="Close">✕</button></div>
+      <div class="sheet-b">
+        <div class="grp">This machine</div>
+        <label class="fld"><span>Machine name</span><input id="setMachine" placeholder="PICASSO_M_1"></label>
+        <label class="fld"><span>Operator</span><input id="setOperator" placeholder="EMRE"></label>
+        <div class="grp">Files</div>
+        <label class="fld"><span>Hot folder <small>(where prints are dropped)</small></span><div class="fld-row"><input id="setHot" placeholder="C:\Users\…\DTF-HotFolder"><button class="browse" data-target="setHot" data-kind="folder">Browse…</button></div></label>
+        <label class="fld"><span>RIPLOG file <small>(Flexi RIP log — marks queue items RIP'd)</small></span><div class="fld-row"><input id="setRip" placeholder="blank = auto-detect"><button class="browse" id="ripDetect" type="button">Detect</button><button class="browse" data-target="setRip" data-kind="file">Browse…</button></div></label>
+        <div class="grp">Connection</div>
+        <label class="fld"><span>Server URL</span><input id="setServer" placeholder="https://dtfproductionstatus.com"></label>
+        <label class="fld"><span>Dropbox root</span><input id="setRoot" placeholder="/PRODUCTION"></label>
+      </div>
+      <div class="sheet-f"><span class="savemsg" id="setMsg"></span><button class="btn-ghost" id="setCancel">Cancel</button><button class="btn-primary" id="setSave">Save</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tabs=[...document.querySelectorAll('.tab')];
+  const panels={files:'p-files',queue:'p-queue',history:'p-history'};
+  function switchTab(name){tabs.forEach(x=>x.setAttribute('aria-selected',x.dataset.tab===name?'true':'false'));Object.entries(panels).forEach(([k,id])=>document.getElementById(id).hidden=(k!==name));if(name==='queue')loadQueue();}
+  tabs.forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+
+  const STORECOLOR={C:'#f5b301',PRO:'#ff7a1a',LSV:'#a78bfa',B:'#34d399',MC:'#38bdf8',IN:'#f472b6',P:'#8b5cf6',MS:'#fb7185',G:'#22d3ee',DWC:'#c084fc'};
+  const storeColor=code=>{const m=(code||'').match(/^[A-Za-z]+/);return (m&&STORECOLOR[m[0]])||'#8b5cf6';};
+
+  let PRINTEDMAP={}; // order code → Set(parts) already in this folder's BASILDI sub-folder
+  let ORDERS=[], SUBS=[], CATS=[], api=null, cfg={machine:'—',operator:'—',hotFolder:'',browseRoot:'/PRODUCTION'}, curPath='/PRODUCTION';
+  const storesCache={};
+  const lastSeg=p=>(p||'').split('/').filter(Boolean).slice(-1)[0]||'PRODUCTION';
+  function categoryOf(path){const root=cfg.browseRoot;if(!path||path===root)return root;const rel=path.slice(root.length).split('/').filter(Boolean);return rel.length?root+'/'+rel[0]:root;}
+  async function ensureStores(cat){const root=cfg.browseRoot;if(cat===root)return CATS;if(storesCache[cat])return storesCache[cat];try{const r=await api.list_folder(cat);if(r&&r.status==='ok'){const f=(r.entries||[]).filter(e=>e.type==='folder');storesCache[cat]=f;return f;}}catch(e){}return [];}
+  // Selection is per SHEET (file path), so a multi-sheet order can be split across
+  // machines: click one sheet to take just that one, click the order to take all of it.
+  const sel=new Set();
+  const selState=o=>{const n=o.sheets.filter(s=>sel.has(s.path)).length;return n===0?'none':n===o.sheets.length?'all':'some';};
+  const selClass=o=>{const st=selState(o);return st==='all'?' sel':st==='some'?' part':'';};
+  const toggleOrder=o=>{const all=selState(o)==='all';o.sheets.forEach(s=>all?sel.delete(s.path):sel.add(s.path));};
+  const toggleSheet=p=>{if(sel.has(p))sel.delete(p);else sel.add(p);};
+  const fmtDate=iso=>{try{const d=new Date(iso);return d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
+  const ordN=document.getElementById('ordN'),shN=document.getElementById('shN'),printBtn=document.getElementById('printBtn');
+  let view=(function(){try{return localStorage.getItem('pf_view')||'grid'}catch(e){return 'grid'}})();
+  let searchMode=false;
+  const PRINTABLE=/\.(png|tif|tiff|jpg|jpeg)$/i;
+
+  function parseFile(name){
+    let code=null,m=name.match(/([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]?\)/);
+    if(m)code=m[1].toUpperCase(); else {m=name.match(/\b([A-Za-z]{1,4}\d{3,})\b/); if(m)code=m[1].toUpperCase();}
+    const cp=name.match(/\((\d+)\s*[xX]\)/); const copies=cp?Math.max(1,parseInt(cp[1],10)):1;
+    // "(a-b)": the smaller number is the part — never part > total
+    const pm=name.match(/\((\d+)\s*-\s*(\d+)\)/); let total=1,part=1; if(pm){const a=parseInt(pm[1],10),b=parseInt(pm[2],10); if(a<=b){part=a;total=b;}else{total=a;part=b;}}
+    const im=name.match(/-(\d+)\s*INCH/i), inch=im?im[1]+'"':'';
+    const uv=/(^|[^A-Za-z])UV\b/i.test(name);
+    let after=name; const cut=name.search(/\(\d+\s*-\s*\d+\)/);
+    if(cut>=0) after=name.slice(cut).replace(/^\(\d+\s*-\s*\d+\)\s*/,'');
+    else {const c2=name.search(/\(\d+\s*[xX]?\)/); if(c2>=0) after=name.slice(c2).replace(/^\(\d+\s*[xX]?\)\s*[-–]?\s*/,'');}
+    const cust=after.replace(/^\(\d+\)\s*[-–]?\s*/,'').replace(/-\d+\s*INCH.*$/i,'').replace(/\.[a-z]+$/i,'').replace(/^[\s-]+/,'').trim();
+    return {code,copies,total,part,inch,uv,cust};
+  }
+  function groupOrders(files){
+    const map=new Map();
+    for(const f of files){const pf=parseFile(f.name),code=pf.code||f.name;let o=map.get(code);if(!o){o={code,cust:'',status:'ready',sheets:[]};map.set(code,o);}o.sheets.push({p:pf.part,total:pf.total,inch:pf.inch,copies:pf.copies,here:true,uv:pf.uv,name:f.name,path:f.path,claimedBy:f.claimedBy||null,printedBy:f.printedBy||null,modified:f.modified||null});if(pf.cust&&!o.cust)o.cust=pf.cust;}
+    const arr=[...map.values()];
+    for(const o of arr){o.sheets.sort((a,b)=>a.p-b.p);const t=Math.max(...o.sheets.map(s=>s.total||1));o.sheets.forEach(s=>s.total=t);o.locked=o.sheets.some(s=>s.claimedBy);o.allLocked=o.sheets.every(s=>s.claimedBy);if(o.sheets.every(s=>s.printedBy))o.status='printed';const pp=(o.sheets[0].path||'').split('/');o.loc=pp.length>1?pp[pp.length-2]:'';o.modified=o.sheets.map(s=>s.modified).filter(Boolean).sort().slice(-1)[0]||null;}
+    arr.sort((a,b)=>a.code.localeCompare(b.code));return arr;
+  }
+  const cx=c=>c>1?`<span class="cx">×${c}</span>`:'';
+  // who printed (from the server's BASILDI registry — visible on every PC's agent)
+  const whoP=pb=>pb?[pb.machine,pb.operator].filter(Boolean).join(' · '):'';
+  const whoOrder=o=>[...new Set(o.sheets.map(s=>whoP(s.printedBy)).filter(Boolean))].join(', ');
+  const statusChip=o=>`<span class="status ${o.status}"><span class="sd"></span>${o.status==='printed'?'Printed · '+whoOrder(o):'Ready'}</span>`;
+  // Printed sheets get moved to <folder>/BASILDI, so an order that is partly printed only
+  // shows its remaining sheets here — this badge says how many are already done.
+  async function loadPrinted(){
+    PRINTEDMAP={}; const b=SUBS.find(f=>/^basildi$/i.test(f.name)); if(!b)return;
+    try{const r=await api.list_folder(b.path);if(r&&r.status==='ok'){for(const f of (r.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name))){const pf=parseFile(f.name);const c=pf.code||f.name;(PRINTEDMAP[c]=PRINTEDMAP[c]||new Set()).add(pf.part);}}}catch(e){}
+  }
+  const printedBadge=(o,cls)=>{const s=PRINTEDMAP[o.code];if(!s||!s.size)return '';return `<span class="${cls}" style="color:var(--ready)" title="${[...s].map(p=>'#'+p).join(', ')} in BASILDI">✓ ${s.size}/${o.sheets[0].total} printed</span>`;};
+
+  function qcard(o){
+    const total=o.sheets[0].total,multi=total>1;
+    const rows=o.sheets.map(s=>`<div class="qs${sel.has(s.path)?' on':''}${s.claimedBy?' lk':''}" data-path="${s.path}" title="${multi?'Take just this sheet':''}"><span class="qsel">✓</span><span class="qsp">#${s.p}/${total}</span><span class="qsi">${s.inch||''}</span>${cx(s.copies)}${s.printedBy?`<span class="quv" style="color:var(--ready);background:var(--ready-dim)" title="${(s.printedBy.at||'').replace('T',' ')}">✓ ${whoP(s.printedBy)}</span>`:s.claimedBy?`<span class="quv" style="color:var(--warn);background:var(--warn-dim)">🔒 ${s.claimedBy.machine}</span>`:''}</div>`).join('');
+    const right=multi?total+' sheets':(o.sheets[0].inch||'');
+    const loc=(searchMode&&o.loc)?`<div class="qloc">📁 ${o.loc}</div>`:'';
+    const nLocked=o.sheets.filter(s=>s.claimedBy).length;
+    return `<div class="qcard${o.allLocked?' locked':''}${selClass(o)}" data-code="${o.code}" style="--bar:${storeColor(o.code)}"><div class="qtop"><span class="qcode">${o.code}</span><span class="qright ${multi?'qmulti':''}">${right}</span></div><div class="qcust">${o.cust||'—'}</div>${loc}<div class="qsheets">${rows}</div><div class="qfoot">${statusChip(o)}${o.locked?`<span class="qaway" style="color:var(--warn)">🔒 ${o.allLocked?'assigned':nLocked+'/'+total+' assigned'}</span>`:''}${printedBadge(o,'qaway')}</div></div>`;
+  }
+  function drow(o){
+    const total=o.sheets[0].total;
+    const chips=o.sheets.map(s=>`<span class="dchip${s.claimedBy?' lk':''}${sel.has(s.path)?' on':''}" data-path="${s.path}" title="${total>1?'Take just this sheet':''}"><span class="dp">#${s.p}${total>1?'/'+total:''}</span><span class="di">${s.claimedBy?'🔒 '+s.claimedBy.machine:(s.inch||'—')}</span></span>${s.printedBy&&whoOrder(o).includes(',')?`<span class="dp" style="color:var(--ready)">✓ ${whoP(s.printedBy)}</span>`:''}${s.copies>1?cx(s.copies):''}`).join('');
+    const loc=(searchMode&&o.loc)?`<span class="loc">📁 ${o.loc}</span>`:'';
+    const md=`<span class="dmod">${o.modified?fmtDate(o.modified):'—'}</span>`;
+    return `<div class="row${o.allLocked?' locked':''}${selClass(o)}" data-code="${o.code}"><span class="dcheck">${selState(o)==='some'?'–':'✓'}</span><span class="dcode">${o.code}</span><span class="dcust">${o.cust||'—'}${loc}${printedBadge(o,'loc')}</span>${md}<span class="dsheets">${chips}</span>${statusChip(o)}</div>`;
+  }
+  const ftile=f=>`<button class="ftile" data-path="${f.path}">📁 <span class="fnm">${f.name}</span> <span class="far">›</span></button>`;
+  function render(){
+    const grid=document.getElementById('grid');
+    let html='';
+    // show a folder's own subfolders (e.g. PRINTED) only when we're deeper than
+    // the category level — at category level the stores are already in the rail.
+    const showChips = SUBS.length && curPath!==cfg.browseRoot && curPath!==categoryOf(curPath);
+    if(showChips) html+=`<div class="ftiles">`+SUBS.map(ftile).join('')+`</div>`;
+    if(ORDERS.length){
+      html+= view==='list'
+        ? `<div class="dhead"><span></span><span>Order</span><span>Customer</span><span style="justify-self:end">Modified</span><span style="justify-self:end">Sheets · inches</span><span style="justify-self:end">Status</span></div>`+ORDERS.map(drow).join('')
+        : `<div class="ogrid">`+ORDERS.map(qcard).join('')+`</div>`;
+    } else if(searchMode){
+      html+='<div style="padding:34px;color:var(--faint);font-size:13px">No results found.</div>';
+    } else if(!showChips){
+      html+= SUBS.length
+        ? '<div style="padding:34px;color:var(--faint);font-size:13px">No files directly here — open one of the folders on the left.</div>'
+        : '<div style="padding:34px;color:var(--faint);font-size:13px">No printable files in this folder.</div>';
+    }
+    const st=grid.scrollTop; grid.innerHTML=html; grid.scrollTop=st;
+    grid.querySelectorAll('.ftile').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.path)));
+    grid.querySelectorAll('[data-code]').forEach(el=>{
+      const o=ORDERS.find(x=>x.code===el.dataset.code); if(!o)return;
+      el.addEventListener('click',()=>{toggleOrder(o);render();});                 // whole order
+      el.querySelectorAll('[data-path]').forEach(sh=>sh.addEventListener('click',e=>{e.stopPropagation();toggleSheet(sh.dataset.path);render();})); // one sheet
+    });
+    updateBar();
+  }
+  function updateBar(){
+    let prints=0, orders=0;
+    for(const o of ORDERS){const picked=o.sheets.filter(s=>sel.has(s.path));if(picked.length){orders++;prints+=picked.reduce((n,s)=>n+(s.copies||1),0);}}
+    ordN.textContent=orders; shN.textContent=prints;
+    printBtn.disabled=prints===0;
+    printBtn.innerHTML='⬇ Download <span class="n">'+prints+'</span> sheets';
+  }
+  document.querySelectorAll('.vtbtn').forEach(b=>{b.toggleAttribute('data-active',b.dataset.view===view);b.addEventListener('click',()=>{view=b.dataset.view;try{localStorage.setItem('pf_view',view)}catch(e){}document.querySelectorAll('.vtbtn').forEach(x=>x.toggleAttribute('data-active',x===b));render();});});
+
+  function setBreadcrumb(path){
+    const root=cfg.browseRoot;
+    const rel=path.startsWith(root)?path.slice(root.length):path;
+    const segs=rel.split('/').filter(Boolean);
+    let acc=root; const parts=[`<span class="cseg" data-p="${root}">PRODUCTION</span>`];
+    segs.forEach(s=>{acc+='/'+s;parts.push(`<span class="sep">/</span><span class="cseg" data-p="${acc}">${s}</span>`);});
+    const el=document.getElementById('crumb'); el.innerHTML=parts.join('');
+    el.querySelectorAll('.cseg').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.p)));
+  }
+  async function navigate(path){
+    curPath=path; sel.clear(); searchMode=false; setBreadcrumb(path);
+    const grid=document.getElementById('grid'); grid.innerHTML='<div style="padding:34px;color:var(--faint);font-size:13px">Loading…</div>';
+    let res; try{res=await api.list_folder(path);}catch(e){res={status:'error',message:e.message};}
+    if(!res||res.status!=='ok'){grid.innerHTML='<div style="padding:34px;color:#ef4444;font-size:13px">Error: '+((res&&res.message)||'listing failed')+'</div>';return;}
+    SUBS=(res.entries||[]).filter(e=>e.type==='folder');
+    const files=(res.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name));
+    ORDERS=groupOrders(files);
+    await loadPrinted();
+    const stores=await ensureStores(categoryOf(path));
+    render(); renderRail(path, stores);
+    stampFresh();
+  }
+  let reloading=false;
+  function stampFresh(){const el=document.getElementById('freshts');if(el)el.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+  async function reload(fresh){
+    if(!api||reloading||searchMode) return; reloading=true;
+    const btn=document.getElementById('refBtn'); if(fresh&&btn)btn.classList.add('spin');
+    try{
+      const res=await api.list_folder(curPath, !!fresh);
+      if(res&&res.status==='ok'){
+        SUBS=(res.entries||[]).filter(e=>e.type==='folder');
+        const files=(res.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name));
+        ORDERS=groupOrders(files);
+        await loadPrinted();
+        const known=new Set(ORDERS.flatMap(o=>o.sheets.map(s=>s.path))); [...sel].forEach(p=>{ if(!known.has(p)) sel.delete(p); });
+        const stores=await ensureStores(categoryOf(curPath));
+        const g=document.getElementById('grid'); const st=g?g.scrollTop:0;
+        render(); renderRail(curPath, stores); if(g)g.scrollTop=st;
+        stampFresh();
+      }
+    }catch(e){}
+    if(btn)btn.classList.remove('spin'); reloading=false;
+  }
+  function renderRail(path, stores){
+    const root=cfg.browseRoot, cat=categoryOf(path), catName=cat===root?'PRODUCTION':lastSeg(cat);
+    const el=document.getElementById('railfolders'); el.innerHTML='';
+    // 1) category switcher — always present (quick access to every category)
+    if(CATS.length){
+      const cw=document.createElement('div'); cw.className='railcats';
+      CATS.forEach(c=>{const b=document.createElement('button');b.className='catpill'+(c.path===cat?' active':'')+(/^UV/i.test(c.name)?' uv':'');b.textContent=c.name;b.title=c.name;b.addEventListener('click',()=>navigate(c.path));cw.appendChild(b);});
+      el.appendChild(cw);
+    }
+    // 2) persistent folder list for the active category (stays put while you drill in)
+    const lab=document.createElement('div'); lab.className='raillabel'; lab.textContent=catName; el.appendChild(lab);
+    (stores||[]).forEach(s=>{const isUV=/^UV/i.test(s.name);const active=(path===s.path||path.startsWith(s.path+'/'));const d=document.createElement('div');d.className='folder'+(isUV?' uvfolder':'')+(active?' active':'');d.dataset.path=s.path;d.innerHTML=`<span class="fi">▸</span><span class="nm">${s.name}</span>`;d.addEventListener('click',()=>navigate(s.path));el.appendChild(d);});
+    if(!(stores||[]).length) el.innerHTML+='<div style="padding:8px 10px;color:var(--faint);font-size:12px">—</div>';
+  }
+  async function boot(){
+    try{
+      cfg=await api.config(); curPath=cfg.browseRoot;
+      document.getElementById('mMachine').textContent=cfg.machine;document.getElementById('mOperator').textContent=cfg.operator;document.getElementById('hotpath').textContent=cfg.hotFolder;
+      loadQueue();
+      const root=await api.list_folder(cfg.browseRoot);
+      if(!root||root.status!=='ok'){document.getElementById('grid').innerHTML='<div style="padding:34px;color:#ef4444">Dropbox listing failed: '+((root&&root.message)||'')+'</div>';return;}
+      CATS=(root.entries||[]).filter(e=>e.type==='folder');
+      const oneDtf=CATS.find(e=>/^1-DTF/i.test(e.name));
+      navigate(oneDtf?oneDtf.path:cfg.browseRoot);
+    }catch(e){document.getElementById('grid').innerHTML='<div style="padding:34px;color:#ef4444">Bridge error: '+e.message+'</div>';}
+  }
+  printBtn.addEventListener('click',async()=>{
+    const picked=ORDERS.flatMap(o=>o.sheets.filter(s=>sel.has(s.path)).map(s=>({o,s})));
+    const lockedSel=picked.filter(x=>x.s.claimedBy);
+    if(lockedSel.length && !confirm('Already assigned to another machine:\n'+lockedSel.map(x=>x.o.code+' #'+x.s.p+'/'+x.s.total+' ('+(x.s.claimedBy.machine||'?')+')').join('\n')+'\n\nDownload here anyway?')) return;
+    const items=picked.map(x=>({path:x.s.path,copies:x.s.copies||1}));
+    if(!items.length)return;
+    printBtn.disabled=true; printBtn.innerHTML='⏳ Downloading…';
+    // live progress bar (polls Python while the download runs)
+    const fmtMB=b=>(b/1048576).toFixed(1)+' MB';
+    const dl=document.getElementById('dlprog'),fill=document.getElementById('dlfill'),txt=document.getElementById('dltxt'),tgt=document.getElementById('target');
+    tgt.hidden=true; dl.hidden=false; fill.style.width='2%'; txt.innerHTML='Starting…';
+    const poll=setInterval(async()=>{try{const p=await api.download_progress();if(!p.active)return;const pct=p.total?Math.round(p.done/p.total*100):0;const overall=p.count?((p.index-1)+(p.total?p.done/p.total:0))/p.count*100:0;fill.style.width=Math.max(2,overall)+'%';txt.innerHTML=`<b>${p.index} of ${p.count}</b> · ${(p.file||'').replace(/</g,'&lt;')} · ${p.total?fmtMB(p.done)+' / '+fmtMB(p.total)+' ('+pct+'%)':fmtMB(p.done)}`;}catch(e){}},250);
+    let res; try{res=await api.print_files(items);}catch(e){res={ok:[],failed:[{error:e.message}]};}
+    clearInterval(poll); fill.style.width='100%'; txt.innerHTML=`<b>${res.ok?res.ok.length:0}</b> file(s) in hot folder ✓`;
+    setTimeout(()=>{dl.hidden=true;tgt.hidden=false;},1800);
+    if(res.failed&&res.failed.length) alert((res.ok?res.ok.length:0)+' file(s) downloaded.\n\nFailed: '+res.failed.length+'\n'+res.failed.map(f=>f.error||'').join('\n'));
+    sel.clear(); navigate(curPath);
+    await loadQueue(); switchTab('queue');   // the files now sit in this machine's queue as "Downloaded"
+  });
+  // ── search across all of PRODUCTION (Dropbox indexes it server-side) ──
+  const searchInput=document.getElementById('searchInput'), searchClear=document.getElementById('searchClear');
+  let searchTimer=null, searchSeq=0;
+  async function doSearch(q){
+    const seq=++searchSeq; searchMode=true; sel.clear(); SUBS=[];
+    const grid=document.getElementById('grid'); grid.innerHTML='<div style="padding:34px;color:var(--faint);font-size:13px">Searching…</div>';
+    let res; try{res=await api.search(q);}catch(e){res={status:'error',message:e.message};}
+    if(seq!==searchSeq) return; // a newer search superseded this one
+    if(!res||res.status!=='ok'){grid.innerHTML='<div style="padding:34px;color:#ef4444;font-size:13px">Search error: '+((res&&res.message)||'')+'</div>';return;}
+    const files=(res.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name));
+    ORDERS=groupOrders(files);
+    document.getElementById('crumb').innerHTML='<span class="cseg" id="crumbBack">← Folders</span><span class="sep">·</span>🔎 <b>"'+q.replace(/</g,'&lt;')+'"</b> <span style="color:var(--faint)">· '+ORDERS.length+(ORDERS.length===1?' order':' orders')+'</span>';
+    const cb=document.getElementById('crumbBack'); if(cb)cb.addEventListener('click',()=>exitSearch());
+    render();
+  }
+  function exitSearch(){ searchInput.value=''; searchClear.hidden=true; searchMode=false; navigate(curPath); }
+  searchInput.addEventListener('input',()=>{
+    const q=searchInput.value.trim(); searchClear.hidden=!q; clearTimeout(searchTimer);
+    if(q.length<2){ if(searchMode){ searchMode=false; navigate(curPath); } return; }
+    searchTimer=setTimeout(()=>doSearch(q),350);
+  });
+  searchClear.addEventListener('click',exitSearch);
+  searchInput.addEventListener('keydown',e=>{if(e.key==='Escape')exitSearch();});
+
+  // ── settings modal ──
+  const settingsEl=document.getElementById('settings');
+  const setF={machine:'setMachine',operator:'setOperator',hotFolder:'setHot',riplog:'setRip',server:'setServer',browseRoot:'setRoot'};
+  function openSettings(){ for(const k in setF){document.getElementById(setF[k]).value=cfg[k]||'';} document.getElementById('setMsg').textContent=''; settingsEl.hidden=false; }
+  function closeSettings(){ settingsEl.hidden=true; }
+  document.getElementById('gearBtn').addEventListener('click',openSettings);
+  document.getElementById('setClose').addEventListener('click',closeSettings);
+  document.getElementById('setCancel').addEventListener('click',closeSettings);
+  settingsEl.addEventListener('click',e=>{ if(e.target===settingsEl) closeSettings(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!settingsEl.hidden) closeSettings(); });
+  settingsEl.querySelectorAll('.browse[data-target]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!api) return;
+    const r = b.dataset.kind==='file' ? await api.pick_file() : await api.pick_folder();
+    if(r&&r.status==='ok'&&r.path) document.getElementById(b.dataset.target).value=r.path;
+  }));
+  document.getElementById('ripDetect').addEventListener('click',async()=>{
+    if(!api) return; const msg=document.getElementById('setMsg'); msg.style.color=''; msg.textContent='Looking for RIPLOG.HTML…';
+    const r=await api.detect_riplog();
+    if(r&&r.status==='ok'){document.getElementById('setRip').value=r.path;msg.textContent='Found ✓';}
+    else {msg.style.color='#ef4444';msg.textContent='Not found — is Flexi installed on this PC? Use Browse…';}
+  });
+  document.getElementById('setSave').addEventListener('click',async()=>{
+    if(!api) return;
+    const patch={}; for(const k in setF){patch[k]=document.getElementById(setF[k]).value.trim();}
+    const res=await api.save_config(patch);
+    if(res&&res.status==='ok'){
+      cfg=res.config;
+      document.getElementById('mMachine').textContent=cfg.machine;
+      document.getElementById('mOperator').textContent=cfg.operator;
+      document.getElementById('hotpath').textContent=cfg.hotFolder;
+      document.getElementById('setMsg').textContent='Saved ✓';
+      setTimeout(()=>{ closeSettings(); boot(); }, 500);
+    } else {
+      document.getElementById('setMsg').style.color='#ef4444';
+      document.getElementById('setMsg').textContent='Error: '+((res&&res.message)||'save failed');
+    }
+  });
+
+  // ── Queue: this machine's work list ──
+  // Stages: Downloaded (Print pressed) → RIP'd (name seen in RIPLOG) → Printed ✓ (oven camera read the QR).
+  // Nothing here is clicked by the operator; the stages advance on their own.
+  const STUCK={dl:[30,60], rip:[45,90]}; // minutes → amber, red
+  let QITEMS=[];
+  const mins=iso=>iso?Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000)):0;
+  const ago=iso=>{const m=mins(iso);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.floor(m/60),r=m%60;return h+' h'+(r?' '+r+' min':'')+' ago';};
+  const clock=iso=>{try{return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}catch(e){return ''}};
+  const qstage=it=>it.printed_at?'done':it.ripped_at?'rip':'dl';
+  function qrow(it){
+    const st=qstage(it), copies=it.copies||1, n=it.printed_count||0;
+    let msg='', flag='';
+    if(st==='dl'){const m=mins(it.assigned_at);flag=m>=STUCK.dl[1]?'late':m>=STUCK.dl[0]?'warn':'';msg=`Downloaded ${ago(it.assigned_at)} · `+(flag?"not RIP'd yet":'waiting for RIP');}
+    else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp;}
+    else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'');}
+    const icon=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
+    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><button class="qmore" title="More">⋯</button></div>`;
+  }
+  function renderQueue(){
+    const list=document.getElementById('qlist'); if(!list)return;
+    const open=QITEMS.filter(i=>!i.printed_at).sort((a,b)=>(a.assigned_at||'').localeCompare(b.assigned_at||''));
+    const done=QITEMS.filter(i=>i.printed_at).sort((a,b)=>(b.printed_at||'').localeCompare(a.printed_at||''));
+    const dl=open.filter(i=>!i.ripped_at).length;
+    document.getElementById('qsDl').textContent=dl; document.getElementById('qsRip').textContent=open.length-dl; document.getElementById('qsDone').textContent=done.length;
+    const cnt=document.querySelector('.tab[data-tab="queue"] .cnt'); if(cnt)cnt.textContent=open.length;
+    let html='';
+    if(open.length) html+=`<div class="qsec">In progress <b>${open.length}</b></div>`+open.map(qrow).join('');
+    if(done.length) html+=`<div class="qsec">Printed today <b>${done.length}</b></div>`+done.map(qrow).join('');
+    if(!html) html=`<div class="qempty"><b>Nothing on this machine yet.</b><br>Pick orders in <b>Print Files</b> and press Print — they show up here as <b>Downloaded</b>, turn <b>RIP'd</b> when Flexi logs them, and get a ✓ when the oven camera reads their QR.</div>`;
+    list.innerHTML=html;
+    list.querySelectorAll('.qmore').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();openMenu(b.closest('.qr'));}));
+  }
+  function closeMenus(){document.querySelectorAll('.qpop').forEach(p=>p.remove());}
+  function openMenu(row){
+    closeMenus(); const it=QITEMS.find(i=>i.id===row.dataset.id); if(!it)return;
+    const pop=document.createElement('div'); pop.className='qpop';
+    // Printed rows: the claim was already released by the scan, so only Remove makes sense.
+    const acts=[['redownload','⬇ Download again to hot folder'],...(it.printed_at?(it.moved_to?[]:[['move_printed','📁 Move to BASILDI (retry)']]):[['mark_printed','✓ Mark printed (camera missed it)'],['release','↩ Release — let another machine take it']]),['remove','✕ Remove from this list']];
+    pop.innerHTML=acts.map(a=>`<button data-act="${a[0]}" class="${a[0]==='remove'?'danger':''}">${a[1]}</button>`).join('')+`<div class="hint" title="${it.name}">${it.name}</div>`;
+    pop.querySelectorAll('button').forEach(b=>b.addEventListener('click',async()=>{closeMenus();const r=await api.queue_action(it.id,b.dataset.act);if(r&&r.status==='ok'){QITEMS=r.items;renderQueue();}else alert('Error: '+((r&&r.message)||'failed'));}));
+    row.appendChild(pop);
+  }
+  document.addEventListener('click',closeMenus);
+  async function loadQueue(){
+    if(!api)return;
+    try{const r=await api.queue();if(r&&r.status==='ok'){QITEMS=r.items||[];renderQueue();const rs=document.getElementById('ripState');if(rs){const rl=r.riplog||{};rs.textContent=rl.found?('watched'+(rl.auto?' (auto-detected)':'')):(rl.path?'file not found':'not found — set it in ⚙ Settings');rs.title=rl.path||'';}}}catch(e){}
+  }
+  // simulated oven-camera read (the real agent gets this from its camera thread)
+  const flash=document.getElementById('scanFlash'); let flashT=null;
+  function beep(kind){try{const ac=new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=kind==='ok'?880:kind==='warn'?520:220;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(kind==='ok'?.12:.3));}catch(e){}}
+  function showFlash(kind,big,sub){flash.className='flash'+(kind==='ok'?'':' '+kind);flash.querySelector('.big').innerHTML=big;flash.querySelector('.sub').textContent=sub;flash.hidden=false;beep(kind);clearTimeout(flashT);flashT=setTimeout(()=>flash.hidden=true,kind==='ok'?1600:2600);}
+  async function doScan(code){
+    if(!api||!code)return;
+    let r; try{r=await api.queue_scan(code);}catch(e){r={status:'error'};}
+    if(r.status==='ok'){const it=r.item,cp=it.copies||1;showFlash('ok',`${it.code}${it.total>1?`<small>sheet ${it.part} of ${it.total}</small>`:''}`,r.done?(cp>1?`Printed ✓ · ${cp} of ${cp} copies`:'Printed ✓'):`Copy ${it.printed_count} of ${cp} ✓`);}
+    else if(r.status==='already'){showFlash('warn',r.item.code,'Already printed — logged as reprint');}
+    else if(r.status==='unknown'){showFlash('bad',(r.code||code).replace(/</g,'&lt;'),"Unknown code — not in this machine's queue");}
+    else showFlash('bad','Error','Scan failed');
+    loadQueue();
+  }
+  const scanInput=document.getElementById('scanInput');
+  document.getElementById('scanBtn').addEventListener('click',()=>{doScan(scanInput.value.trim());scanInput.value='';});
+  scanInput.addEventListener('keydown',e=>{if(e.key==='Enter'){doScan(scanInput.value.trim());scanInput.value='';}});
+  document.getElementById('clearDone').addEventListener('click',async()=>{const r=await api.queue_clear_done();if(r&&r.status==='ok'){QITEMS=r.items;renderQueue();}});
+  setInterval(()=>{ if(api && !document.hidden && !document.getElementById('p-queue').hidden) loadQueue(); }, 5000);
+
+  document.getElementById('refBtn').addEventListener('click',()=>reload(true));
+  // auto-refresh the current folder (uses the server's short cache, so many
+  // agents polling still cost ~1 Dropbox call per folder); pauses when hidden.
+  setInterval(()=>{ if(api && !document.hidden && !document.getElementById('p-files').hidden) reload(false); }, 15000);
+  if(window.pywebview&&window.pywebview.api){api=window.pywebview.api;boot();}
+  else window.addEventListener('pywebviewready',()=>{api=window.pywebview.api;boot();});
+
+  document.getElementById('hbody').innerHTML=[
+    ["14:38","LSV2576",'22-1PX - LSV2576 (2-2)…20INCH.tif',"EMRE",'20"'],
+    ["14:12","PRO7807",'5-1PX - PRO7807 (3-3)…300INCH.tif',"EMRE",'300"'],
+    ["13:44","C41097",'10-##UV - C41097 (1-1)…11INCH.png',"EMRE",'11"']
+  ].map(r=>`<tr><td class="t">${r[0]}</td><td><span class="code">${r[1]}</span></td><td class="mono" title="${r[2]}" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${r[2]}</td><td><span class="op">${r[3]}</span></td><td class="num">${r[4]}</td><td><span class="status done"><span class="sd"></span>Done</span></td></tr>`).join("");
+</script>
+</body>
+</html>
