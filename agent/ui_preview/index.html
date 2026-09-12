@@ -304,7 +304,7 @@
         <div class="main">
           <div class="toolbar">
             <div class="crumb" id="crumb"></div>
-            <div class="viewtoggle"><button class="vtbtn" data-view="grid" data-active>▦ Grid</button><button class="vtbtn" data-view="list">☰ List</button></div>
+            <div class="viewtoggle"><button class="vtbtn" data-view="list" data-active>☰ List</button><button class="vtbtn" data-view="grid">▦ Grid</button></div>
             <button class="refbtn" id="refBtn" title="Refresh (Dropbox)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
             <span class="freshts" id="freshts"></span>
             <div class="spacer" style="flex:1"></div>
@@ -407,7 +407,7 @@
   const toggleSheet=p=>{if(sel.has(p))sel.delete(p);else sel.add(p);};
   const fmtDate=iso=>{try{const d=new Date(iso);return d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
   const ordN=document.getElementById('ordN'),shN=document.getElementById('shN'),printBtn=document.getElementById('printBtn');
-  let view=(function(){try{return localStorage.getItem('pf_view')||'grid'}catch(e){return 'grid'}})();
+  let view=(function(){try{return localStorage.getItem('pf_view')||'list'}catch(e){return 'list'}})(); // list by default; the toggle remembers a choice
   let searchMode=false;
   const PRINTABLE=/\.(png|tif|tiff|jpg|jpeg)$/i;
 
