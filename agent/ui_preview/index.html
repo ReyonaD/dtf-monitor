@@ -629,12 +629,14 @@
   const ago=iso=>{const m=mins(iso);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.floor(m/60),r=m%60;return h+' h'+(r?' '+r+' min':'')+' ago';};
   const clock=iso=>{try{return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}catch(e){return ''}};
   const qstage=it=>it.printed_at?'done':it.ripped_at?'rip':'dl';
+  // did Order Tracker accept the stage? (ot_ripped / ot_printed set by the bridge)
+  const otMark=v=>!v?'':v==='ok'?' · <span style="color:var(--ready)" title="Order Tracker updated">OT ✓</span>':` · <span style="color:var(--warn)" title="${String(v).replace(/"/g,'&quot;')}">⚠ OT</span>`;
   function qrow(it){
     const st=qstage(it), copies=it.copies||1, n=it.printed_count||0;
     let msg='', flag='';
     if(st==='dl'){const m=mins(it.assigned_at);flag=m>=STUCK.dl[1]?'late':m>=STUCK.dl[0]?'warn':'';msg=`Downloaded ${ago(it.assigned_at)} · `+(flag?"not RIP'd yet":'waiting for RIP');}
-    else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp;}
-    else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'');}
+    else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp+otMark(it.ot_ripped);}
+    else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'')+otMark(it.ot_printed);}
     const icon=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
     return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><button class="qmore" title="More">⋯</button></div>`;
   }

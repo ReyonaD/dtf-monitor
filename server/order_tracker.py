@@ -97,6 +97,42 @@ def get_order_status(order_code: str) -> Optional[dict]:
         return None
 
 
+def update_sheet(order_code: str, part: int, total: int, copies: int, stage: str,
+                 machine_name: str = "", operator: str = "", file_name: str = "",
+                 printed_count: Optional[int] = None) -> dict:
+    """Per-sheet progress from the agent queue: stage = 'ripped' | 'printed'.
+    Order Tracker keeps one row per sheet and rolls the order up itself
+    ("RIP'd 1/5" → "Printed 3/5" → "Printed"). Returns {ok, message}."""
+    if not API_KEY:
+        logger.error("ORDER_TRACKER_API_KEY not set; skipping sheet update")
+        return {"ok": False, "message": "Order Tracker API key not configured"}
+    body = {
+        "orderCode": order_code, "stage": stage,
+        "printStatus": "Printed" if stage == "printed" else "RIP'd",
+        "part": part, "total": total, "copies": copies,
+        "machine": machine_name, "operator": operator, "fileName": file_name,
+    }
+    if printed_count is not None:
+        body["printedCount"] = printed_count
+    try:
+        resp = requests.post(
+            f"{API_URL}/integrations/print",
+            headers={"X-Api-Key": API_KEY, "Content-Type": "application/json"},
+            json=body, timeout=TIMEOUT,
+        )
+        if resp.status_code == 200:
+            logger.info(f"Sheet {order_code} #{part}/{total} -> {stage} ({machine_name}/{operator})")
+            return {"ok": True, "message": "ok"}
+        if resp.status_code == 404:
+            logger.warning(f"Sheet update: order '{order_code}' not found in Order Tracker")
+            return {"ok": False, "message": f"order {order_code} not found in Order Tracker"}
+        logger.error(f"Sheet update failed for '{order_code}': {resp.status_code} {resp.text[:200]}")
+        return {"ok": False, "message": f"Order Tracker {resp.status_code}"}
+    except Exception as e:
+        logger.error(f"Sheet update request failed for '{order_code}': {e}")
+        return {"ok": False, "message": str(e)[:120]}
+
+
 def update_orders_for_jobs(jobs: list[dict], machine_name: str, operator: str = ""):
     """
     Process completed jobs — extract order codes and mark them printed.

@@ -42,7 +42,7 @@ from database import (
     get_customer_files_for_machine, match_customer_file_by_code,
 )
 # Order Tracker integration (replaces the old Google Sheets writer).
-from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status
+from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status, update_sheet
 import dropbox_service as dbx
 
 logger = logging.getLogger(__name__)
@@ -1117,6 +1117,24 @@ async def dropbox_move(req: Request):
         return {"status": "ok", "result": result, "path": moved_path}
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+@app.post("/api/sheet-status")
+async def sheet_status(req: Request):
+    """Agent queue → per-sheet progress (ripped | printed) → Order Tracker, which
+    keeps one row per sheet and rolls the order up ("RIP'd 1/5" … "Printed")."""
+    import asyncio
+    body = await req.json() or {}
+    code = (body.get("code") or "").strip()
+    stage = (body.get("stage") or "").strip().lower()
+    if not code or stage not in ("ripped", "printed"):
+        return JSONResponse({"status": "error", "message": "code and stage (ripped|printed) required"}, status_code=400)
+    r = await asyncio.to_thread(
+        update_sheet, code, int(body.get("part") or 1), int(body.get("total") or 1),
+        int(body.get("copies") or 1), stage, body.get("machine", ""), body.get("operator", ""),
+        body.get("fileName", ""), body.get("printedCount"),
+    )
+    return {"status": "ok" if r["ok"] else "error", "message": r["message"]}
 
 
 # ── Serve dashboard static files ──

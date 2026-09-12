@@ -270,20 +270,36 @@ def _riplog_text():
 
 def _apply_riplog(items):
     """Mark Downloaded items RIP'd when their file name appears in the RIPLOG.
-    (Preview shortcut: substring match. The real agent uses RIPLogParser and
-    only counts entries newer than assigned_at.)"""
+    Returns the newly RIP'd items. (Preview shortcut: substring match. The real
+    agent uses RIPLogParser and only counts entries newer than assigned_at.)"""
     txt = _riplog_text()
     if txt is None:
-        return False
-    changed = False
+        return []
+    newly = []
     for it in items:
         if it.get("ripped_at") or it.get("printed_at"):
             continue
         stem = os.path.splitext(it["name"])[0].lower()
         if stem and stem in txt:
             it["ripped_at"] = _now()
-            changed = True
-    return changed
+            newly.append(it)
+    return newly
+
+
+def _report_sheet(it, stage):
+    """Tell the server (→ Order Tracker) this sheet is RIP'd / Printed. Best-effort:
+    the outcome is kept on the item (ot_ripped / ot_printed) for the Queue row."""
+    try:
+        r = _post("/api/sheet-status", {
+            "code": it["code"], "part": it.get("part", 1), "total": it.get("total", 1),
+            "copies": it.get("copies", 1), "printedCount": it.get("printed_count", 0),
+            "stage": stage, "fileName": it["name"],
+            "machine": it.get("printed_machine") or CFG["machine"],
+            "operator": it.get("printed_operator") or CFG["operator"],
+        })
+        it["ot_" + stage] = "ok" if r.get("status") == "ok" else str(r.get("message") or "error")[:120]
+    except Exception as e:
+        it["ot_" + stage] = str(e)[:120]
 
 
 def _release(path):
@@ -391,7 +407,10 @@ class Api:
     # ── Queue API ──
     def queue(self):
         items = _load_queue()
-        if _apply_riplog(items):
+        newly = _apply_riplog(items)
+        for it in newly:
+            _report_sheet(it, "ripped")  # → Order Tracker: "RIP'd n/N"
+        if newly:
             _save_queue(items)
         rip = _riplog_path()
         return {"status": "ok", "items": items, "machine": CFG["machine"],
@@ -428,6 +447,7 @@ class Api:
         if done:
             it.update(printed_at=_now(), printed_machine=CFG["machine"], printed_operator=CFG["operator"])
             _move_to_printed(it)  # → <folder>/BASILDI, claim released by the server
+            _report_sheet(it, "printed")  # → Order Tracker: "Printed n/N" / "Printed"
         _save_queue(items)
         return {"status": "ok", "item": it, "done": done}
 
@@ -446,6 +466,7 @@ class Api:
                 it.update(printed_count=it.get("copies", 1), printed_at=_now(), manual=True,
                           printed_machine=CFG["machine"], printed_operator=CFG["operator"])
                 _move_to_printed(it)
+                _report_sheet(it, "printed")
             elif action == "move_printed":  # retry the BASILDI move
                 _move_to_printed(it)
             elif action == "redownload":

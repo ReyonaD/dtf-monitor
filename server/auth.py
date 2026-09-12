@@ -75,6 +75,7 @@ PUBLIC_PATHS = {
     "/api/dropbox/move",                  # agent Print-Files: move a printed file
     "/api/dropbox/claim",                 # agent Print-Files: lock a file being printed
     "/api/dropbox/release",               # agent Print-Files: unlock a file
+    "/api/sheet-status",                  # agent queue: sheet RIP'd / Printed → Order Tracker
     "/login",
     "/favicon.ico",
     "/api/history",

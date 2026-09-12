@@ -75,6 +75,18 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 
+## Sheet progress → Order Tracker (`POST /api/sheet-status`, built 2026-09-12)
+Agent queue events go **through this server** to OT (the OT API key never leaves the server):
+`{code, part, total, copies, stage: ripped|printed, machine, operator, fileName, printedCount}`
+→ `order_tracker.update_sheet()` → OT `/integrations/print` per-sheet mode (OT keeps a `Sheet`
+row per part and rolls the order up: `RIP'd 1/5` → `Printed 3/5` → `Printed`). The preview
+agent calls it when RIPLOG flips a queue item to RIP'd and when a scan/Mark-printed completes;
+the Queue row shows `OT ✓` / `⚠ OT` with the reason.
+**Legacy path still live**: the old tkinter agents' RIPLOG "auto-complete" + Complete button
+(`server.py` → `update_orders_for_jobs`) still writes order-level `Printed` to OT — kept on
+purpose until the new agent is rolled out to the printer PCs (the old agents have no other
+way to report). Retire it when `agent.py` gets the Queue + camera.
+
 ## Production-tracking design (agreed 2026-09, being built)
 Problem: RIPLOG ≠ printed. A downloaded file can never reach Flexi, and a RIP'd file can never
 be sent to the printer — both invisible to the agent. Design: **expected vs. actual**.
