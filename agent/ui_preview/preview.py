@@ -12,15 +12,18 @@ Settings (hot folder, RIPLOG file, machine, operator, server, root) are edited
 in-app from the ⚙ icon and saved to agent_config.json next to this file. Env
 vars below are only the first-run defaults.
   DTF_SERVER, DTF_BROWSE_ROOT, DTF_HOT_FOLDER, DTF_MACHINE, DTF_OPERATOR, DTF_RIPLOG
+
+The Queue (Downloaded → RIP'd → Printed ✓) lives on the SERVER (/api/queue/*), so
+every machine, the wall board and Order Tracker see the same list. This bridge
+only reports events: downloaded (after Print), RIP'd (it watches the local RIPLOG),
+and — in the preview — a simulated oven-camera scan.
 """
 import os
 import re
 import json
-import uuid
 import shutil
 import urllib.request
 import urllib.parse
-from datetime import datetime
 import webview
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
@@ -71,8 +74,12 @@ def _get(path, fresh=False):
     url = f"{_server()}/api/dropbox/list?path=" + urllib.parse.quote(path)
     if fresh:
         url += "&fresh=1"
+    return _get_json_url(url)
+
+
+def _get_json_url(url, timeout=25):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=25) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
@@ -100,121 +107,11 @@ def _download(url, dest):
             PROGRESS["done"] += len(chunk)
 
 
-# Printed sheets are moved into this sub-folder of the folder they were in
-# (e.g. /PRODUCTION/1-DTF/PRO/BASILDI/). Keeps the store folder = "still to print".
-PRINTED_FOLDER = "BASILDI"
+def _who():
+    return {"machine": CFG["machine"], "operator": CFG["operator"]}
 
 
-def _move_to_printed(it):
-    """Move a printed sheet to <its folder>/BASILDI on Dropbox (the server moves it
-    and releases the claim). Outcome is recorded on the queue item."""
-    src = it["path"]
-    folder, base = src.rsplit("/", 1)
-    dst = f"{folder}/{PRINTED_FOLDER}/{base}"  # name unchanged; who printed it is reported by the agent
-    try:
-        r = _post("/api/dropbox/move", {"from": src, "to": dst,
-                                        "machine": it.get("printed_machine") or CFG["machine"],
-                                        "operator": it.get("printed_operator") or CFG["operator"]})
-        if r.get("status") == "ok":
-            it["moved_to"] = dst
-            it.pop("move_error", None)
-            return
-        it["move_error"] = r.get("message", "move failed")
-    except Exception as e:
-        it["move_error"] = str(e)[:200]
-    _release(src)  # not moved, but at least drop the lock
-
-
-# ── Queue: this machine's work list ─────────────────────────────────────────
-# Stages: Downloaded (Print pressed → file in hot folder) → RIP'd (the file's
-# name shows up in Flexi's RIPLOG) → Printed ✓ (oven camera read the sheet's QR).
-# PREVIEW-ONLY store: queue.json next to this file. In the real agent the queue
-# lives on the server (heartbeat already returns `jobs`) and the camera thread
-# posts scans to /api/scan; here scans are simulated from the UI.
-QUEUE_FILE = os.path.join(HERE, "queue.json")
-
-_CODE_WITH_COPIES = re.compile(r"([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]?\)")
-_CODE_PLAIN = re.compile(r"\b([A-Za-z]{1,4}\d{3,})\b")
-_COPIES = re.compile(r"\((\d+)\s*[xX]\)")
-_PART = re.compile(r"\((\d+)\s*-\s*(\d+)\)|(?<![\w/])(\d+)\s*/\s*(\d+)(?![\w/])")
-_INCH = re.compile(r"-(\d+)\s*INCH", re.I)
-
-
-def _parse_name(name):
-    """Same rules as parseFile() in index.html: order code, part/total, copies, inches."""
-    m = _CODE_WITH_COPIES.search(name) or _CODE_PLAIN.search(name)
-    code = m.group(1).upper() if m else None
-    cm = _COPIES.search(name)
-    copies = max(1, int(cm.group(1))) if cm else 1
-    part, total = 1, 1
-    pm = _PART.search(name)
-    if pm:
-        a = int(pm.group(1) or pm.group(3))
-        b = int(pm.group(2) or pm.group(4))
-        # "(a-b)": the smaller number is the part — never part > total
-        part, total = (a, b) if a <= b else (b, a)
-    im = _INCH.search(name)
-    inch = (im.group(1) + '"') if im else ""
-    return {"code": code, "part": part, "total": total, "copies": copies, "inch": inch}
-
-
-def _cust_of(name):
-    after = name
-    cut = re.search(r"\(\d+\s*-\s*\d+\)", name)
-    if cut:
-        after = re.sub(r"^\(\d+\s*-\s*\d+\)\s*", "", name[cut.start():])
-    else:
-        c2 = re.search(r"\(\d+\s*[xX]?\)", name)
-        if c2:
-            after = re.sub(r"^\(\d+\s*[xX]?\)\s*[-–]?\s*", "", name[c2.start():])
-    after = re.sub(r"^\(\d+\)\s*[-–]?\s*", "", after)  # "(2x) - (1) Name" → "Name"
-    after = re.sub(r"-\d+\s*INCH.*$", "", after, flags=re.I)
-    after = re.sub(r"\.[a-z]+$", "", after, flags=re.I)
-    return re.sub(r"^[\s-]+", "", after).strip()
-
-
-def _now():
-    return datetime.now().isoformat(timespec="seconds")
-
-
-def _load_queue():
-    try:
-        with open(QUEUE_FILE, encoding="utf-8") as f:
-            return json.load(f).get("items", [])
-    except Exception:
-        return []
-
-
-def _save_queue(items):
-    with open(QUEUE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"items": items}, f, indent=2)
-
-
-def _queue_upsert(items, path, hot_path, copies):
-    name = os.path.basename(path)
-    for it in items:
-        if it["path"] == path:
-            # downloaded again → a fresh (re)print of this sheet
-            it.update(assigned_at=_now(), ripped_at=None, printed_at=None, printed_count=0,
-                      extra_scans=0, manual=False, hot_path=hot_path, copies=copies,
-                      machine=CFG["machine"], operator=CFG["operator"])
-            return it
-    pf = _parse_name(name)
-    it = {
-        "id": uuid.uuid4().hex[:10], "path": path, "name": name, "hot_path": hot_path,
-        "code": pf["code"] or name, "part": pf["part"], "total": pf["total"], "copies": copies,
-        "inch": pf["inch"], "cust": _cust_of(name),
-        "machine": CFG["machine"], "operator": CFG["operator"],
-        "assigned_at": _now(), "ripped_at": None, "printed_at": None,
-        "printed_count": 0, "extra_scans": 0, "manual": False,
-    }
-    items.append(it)
-    return it
-
-
-_RIP_CACHE = {"mtime": None, "text": None}
-
-
+# ── RIPLOG (Flexi's RIP log on this PC) ─────────────────────────────────────
 def _find_riplog():
     """Auto-detect Flexi's live RIPLOG.HTML. Newer SAi Production Suite installs keep it
     under ProgramData\\SAi\\SAi Production Suite\\LicenseData\\<id>\\<hash>\\Jobs and Settings\\,
@@ -251,6 +148,9 @@ def _riplog_path():
     return _AUTO_RIPLOG["path"]
 
 
+_RIP_CACHE = {"mtime": None, "text": None}
+
+
 def _riplog_text():
     """Lower-cased text of RIPLOG.HTML (tags stripped), re-read only when it changes."""
     p = _riplog_path()
@@ -268,45 +168,11 @@ def _riplog_text():
         return None
 
 
-def _apply_riplog(items):
-    """Mark Downloaded items RIP'd when their file name appears in the RIPLOG.
-    Returns the newly RIP'd items. (Preview shortcut: substring match. The real
-    agent uses RIPLogParser and only counts entries newer than assigned_at.)"""
-    txt = _riplog_text()
-    if txt is None:
-        return []
-    newly = []
-    for it in items:
-        if it.get("ripped_at") or it.get("printed_at"):
-            continue
-        stem = os.path.splitext(it["name"])[0].lower()
-        if stem and stem in txt:
-            it["ripped_at"] = _now()
-            newly.append(it)
-    return newly
-
-
-def _report_sheet(it, stage):
-    """Tell the server (→ Order Tracker) this sheet is RIP'd / Printed. Best-effort:
-    the outcome is kept on the item (ot_ripped / ot_printed) for the Queue row."""
-    try:
-        r = _post("/api/sheet-status", {
-            "code": it["code"], "part": it.get("part", 1), "total": it.get("total", 1),
-            "copies": it.get("copies", 1), "printedCount": it.get("printed_count", 0),
-            "stage": stage, "fileName": it["name"],
-            "machine": it.get("printed_machine") or CFG["machine"],
-            "operator": it.get("printed_operator") or CFG["operator"],
-        })
-        it["ot_" + stage] = "ok" if r.get("status") == "ok" else str(r.get("message") or "error")[:120]
-    except Exception as e:
-        it["ot_" + stage] = str(e)[:120]
-
-
-def _release(path):
-    try:
-        _post("/api/dropbox/release", {"path": path})
-    except Exception:
-        pass
+def _in_riplog(name, txt):
+    """Preview shortcut: substring match on the file's stem. The real agent uses
+    RIPLogParser and only counts entries newer than assigned_at."""
+    stem = os.path.splitext(name)[0].lower()
+    return bool(stem) and stem in txt
 
 
 class Api:
@@ -322,6 +188,7 @@ class Api:
             if k in REQUIRED and (v is None or v == ""):
                 continue  # don't overwrite a good value with a blank one
             CFG[k] = v
+        _AUTO_RIPLOG["path"] = None
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(CFG, f, indent=2)
@@ -351,6 +218,12 @@ class Api:
             return {"status": "error", "message": str(e)}
         return {"status": "cancel"}
 
+    def detect_riplog(self):
+        """Settings → Detect: find Flexi's live RIPLOG.HTML on this PC."""
+        _AUTO_RIPLOG["path"] = None
+        p = _find_riplog()
+        return {"status": "ok" if p else "notfound", "path": p}
+
     def list_folder(self, path, fresh=False):
         try:
             return _get(path or CFG["browseRoot"], fresh)
@@ -359,22 +232,18 @@ class Api:
 
     def search(self, q):
         try:
-            url = f"{_server()}/api/dropbox/search?q=" + urllib.parse.quote(q or "")
-            req = urllib.request.Request(url, headers={"User-Agent": UA})
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read().decode())
+            return _get_json_url(f"{_server()}/api/dropbox/search?q=" + urllib.parse.quote(q or ""), timeout=30)
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
     def print_files(self, items):
         """items: [{path, copies}]. Claim each file (so no other machine grabs
-        it), download it once, and drop `copies` files into the hot folder (a
-        (2x) order prints twice). Move-to-PRINTED happens on completion in the
-        real agent."""
+        it), download it once, drop `copies` files into the hot folder (a (2x)
+        order prints twice) and register it in this machine's server-side queue
+        as Downloaded."""
         hot = CFG["hotFolder"]
         os.makedirs(hot, exist_ok=True)
         ok, failed = [], []
-        queue = _load_queue()
         PROGRESS.update(active=True, count=len(items), index=0, file="", done=0, total=0)
         for i, it in enumerate(items):
             p = it.get("path")
@@ -382,7 +251,7 @@ class Api:
             try:
                 base = os.path.basename(p)
                 PROGRESS.update(index=i + 1, file=base, done=0, total=0)
-                _post("/api/dropbox/claim", {"path": p, "machine": CFG["machine"], "operator": CFG["operator"]})
+                _post("/api/dropbox/claim", {"path": p, **_who()})
                 link = _post("/api/dropbox/temp-link", {"path": p}).get("link")
                 if not link:
                     raise RuntimeError("no download link")
@@ -390,109 +259,77 @@ class Api:
                 first = os.path.join(hot, base)
                 _download(link, first)
                 ok.append(base)
-                for i in range(2, copies + 1):
-                    dst = os.path.join(hot, f"{name} (copy {i}){ext}")
+                for c in range(2, copies + 1):
+                    dst = os.path.join(hot, f"{name} (copy {c}){ext}")
                     shutil.copyfile(first, dst)
                     ok.append(os.path.basename(dst))
-                _queue_upsert(queue, p, first, copies)  # → Downloaded on this machine
+                _post("/api/queue/assign", {"path": p, "hot_path": first, "copies": copies, **_who()})
             except Exception as e:
                 failed.append({"path": p, "error": str(e)})
         PROGRESS["active"] = False
-        _save_queue(queue)
         return {"ok": ok, "failed": failed, "hotFolder": hot}
 
     def download_progress(self):
         return dict(PROGRESS)
 
-    # ── Queue API ──
+    # ── Queue (server-side) ──
     def queue(self):
-        items = _load_queue()
-        newly = _apply_riplog(items)
-        for it in newly:
-            _report_sheet(it, "ripped")  # → Order Tracker: "RIP'd n/N"
-        if newly:
-            _save_queue(items)
+        """This machine's queue from the server; flips Downloaded → RIP'd for files
+        that now appear in the local RIPLOG (the server tells Order Tracker)."""
+        try:
+            items = _get_json_url(f"{_server()}/api/queue?machine=" + urllib.parse.quote(CFG["machine"])).get("items", [])
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+        txt = _riplog_text()
+        if txt is not None:
+            for idx, it in enumerate(items):
+                if it.get("ripped_at") or it.get("printed_at"):
+                    continue
+                if _in_riplog(it["name"], txt):
+                    try:
+                        r = _post("/api/queue/ripped", {"id": it["id"]})
+                        if r.get("item"):
+                            items[idx] = r["item"]
+                    except Exception:
+                        pass
         rip = _riplog_path()
         return {"status": "ok", "items": items, "machine": CFG["machine"],
                 "riplog": {"path": rip, "found": bool(rip and os.path.isfile(rip)),
                            "auto": not (CFG.get("riplog") or "").strip()}}
 
-    def detect_riplog(self):
-        """Settings → Detect: find Flexi's live RIPLOG.HTML on this PC."""
-        _AUTO_RIPLOG["path"] = None
-        p = _find_riplog()
-        return {"status": "ok" if p else "notfound", "path": p}
-
     def queue_scan(self, code):
-        """Simulated oven-camera read. Accepts 'PRO3956', 'PRO3956 (2-5)',
-        'PRO3956-2/5' or a full file name."""
-        s = (code or "").strip()
-        pf = _parse_name(s)
-        c, part = pf["code"], (pf["part"] if _PART.search(s) else None)
-        if not c:
-            return {"status": "unknown", "code": s}
-        items = _load_queue()
-        cands = [it for it in items if it["code"] == c and (part is None or it["part"] == part)]
-        if not cands:
-            return {"status": "unknown", "code": c, "part": part}
-        open_ = [it for it in cands if not it.get("printed_at")]
-        if not open_:
-            it = cands[0]
-            it["extra_scans"] = it.get("extra_scans", 0) + 1
-            _save_queue(items)
-            return {"status": "already", "item": it}
-        it = open_[0]
-        it["printed_count"] = it.get("printed_count", 0) + 1
-        done = it["printed_count"] >= it.get("copies", 1)
-        if done:
-            it.update(printed_at=_now(), printed_machine=CFG["machine"], printed_operator=CFG["operator"])
-            _move_to_printed(it)  # → <folder>/BASILDI, claim released by the server
-            _report_sheet(it, "printed")  # → Order Tracker: "Printed n/N" / "Printed"
-        _save_queue(items)
-        return {"status": "ok", "item": it, "done": done}
+        """Simulated oven-camera read (the real agent's camera thread posts the same)."""
+        try:
+            return _post("/api/queue/scan", {"code": (code or "").strip(), **_who()})
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     def queue_action(self, item_id, action):
-        items = _load_queue()
-        it = next((x for x in items if x["id"] == item_id), None)
-        if not it:
-            return {"status": "error", "message": "not in queue"}
         try:
-            if action == "release":
-                _release(it["path"])
-                items.remove(it)
-            elif action == "remove":
-                items.remove(it)
-            elif action == "mark_printed":
-                it.update(printed_count=it.get("copies", 1), printed_at=_now(), manual=True,
-                          printed_machine=CFG["machine"], printed_operator=CFG["operator"])
-                _move_to_printed(it)
-                _report_sheet(it, "printed")
-            elif action == "move_printed":  # retry the BASILDI move
-                _move_to_printed(it)
-            elif action == "redownload":
+            if action == "redownload":
+                items = _get_json_url(f"{_server()}/api/queue?machine=" + urllib.parse.quote(CFG["machine"])).get("items", [])
+                it = next((x for x in items if str(x["id"]) == str(item_id)), None)
+                if not it:
+                    return {"status": "error", "message": "not in queue"}
                 link = _post("/api/dropbox/temp-link", {"path": it["path"]}).get("link")
                 if not link:
                     raise RuntimeError("no download link")
                 os.makedirs(CFG["hotFolder"], exist_ok=True)
                 dest = os.path.join(CFG["hotFolder"], it["name"])
                 _download(link, dest)
-                it.update(hot_path=dest, assigned_at=_now(), ripped_at=None, printed_at=None,
-                          printed_count=0, extra_scans=0, manual=False)
-                try:
-                    _post("/api/dropbox/claim", {"path": it["path"], "machine": CFG["machine"], "operator": CFG["operator"]})
-                except Exception:
-                    pass
-            else:
-                return {"status": "error", "message": "unknown action"}
+                _post("/api/queue/assign", {"path": it["path"], "hot_path": dest, "copies": it.get("copies", 1), **_who()})
+                return self.queue_action(None, "__list__")
+            if action == "__list__":
+                return {"status": "ok", "items": _get_json_url(f"{_server()}/api/queue?machine=" + urllib.parse.quote(CFG["machine"])).get("items", [])}
+            return _post("/api/queue/action", {"id": item_id, "action": action, **_who()})
         except Exception as e:
             return {"status": "error", "message": str(e)}
-        _save_queue(items)
-        return {"status": "ok", "items": items}
 
     def queue_clear_done(self):
-        items = [it for it in _load_queue() if not it.get("printed_at")]
-        _save_queue(items)
-        return {"status": "ok", "items": items}
+        try:
+            return _post("/api/queue/clear", {"machine": CFG["machine"]})
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
 
 if __name__ == "__main__":

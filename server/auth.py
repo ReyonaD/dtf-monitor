@@ -76,6 +76,12 @@ PUBLIC_PATHS = {
     "/api/dropbox/claim",                 # agent Print-Files: lock a file being printed
     "/api/dropbox/release",               # agent Print-Files: unlock a file
     "/api/sheet-status",                  # agent queue: sheet RIP'd / Printed → Order Tracker
+    "/api/queue",                         # agent queue: this machine's work list
+    "/api/queue/assign",                  # agent queue: file downloaded on a machine
+    "/api/queue/ripped",                  # agent queue: RIPLOG saw the file
+    "/api/queue/scan",                    # agent queue: oven camera read a sheet's QR
+    "/api/queue/action",                  # agent queue: release / remove / mark printed / retry move
+    "/api/queue/clear",                   # agent queue: hide printed rows
     "/login",
     "/favicon.ico",
     "/api/history",

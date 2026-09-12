@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print Queue — all machines</title>
+<style>
+  :root{--bg:#0A0A0B;--surface:#111113;--surface2:#19191D;--surface3:#222228;--border:#26262e;--text:#F1F0EA;--muted:#8b8b97;--faint:#5a5a66;
+        --accent:#a78bfa;--accent-dim:rgba(139,92,246,.16);--green:#3DCF82;--green-dim:rgba(61,207,130,.14);--warn:#fbbf24;--red:#ef4444;
+        --mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;--ui:system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--border);background:var(--surface)}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+  header .sum{display:flex;gap:8px;margin-left:8px}
+  .pill{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;color:var(--muted);white-space:nowrap}
+  .pill b{color:var(--text);font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .d-dl{background:var(--muted)}.d-rip{background:var(--accent)}.d-ok{background:var(--green)}.d-bad{background:var(--red)}
+  header .right{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--faint)}
+  header a{color:var(--muted);text-decoration:none;border:1px solid var(--border);padding:5px 10px;border-radius:7px}
+  header a:hover{color:var(--text)}
+  main{padding:18px 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
+  .machine{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .mh{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .mh .name{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--accent)}
+  .mh .op{font-size:12px;color:var(--muted)}
+  .mh .cnt{margin-left:auto;display:flex;gap:6px;font-size:11px;color:var(--muted)}
+  .mh .cnt span{display:inline-flex;align-items:center;gap:5px}
+  .row{display:grid;grid-template-columns:22px 128px minmax(100px,1fr) 92px minmax(180px,auto);align-items:center;gap:12px;padding:9px 14px;border-bottom:1px solid var(--border);min-height:44px}
+  .row:last-child{border-bottom:0}
+  .row.warn{box-shadow:inset 3px 0 0 var(--warn)}.row.late{box-shadow:inset 3px 0 0 var(--red)}
+  .row.done{opacity:.5}
+  .ic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800;border:1.5px solid var(--faint);color:var(--faint)}
+  .row.rip .ic{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .row.done .ic{border-color:var(--green);background:var(--green);color:#06231a}
+  .code{font-family:var(--mono);font-weight:700;font-size:13px;white-space:nowrap}
+  .code small{font-weight:600;font-size:11px;color:var(--faint);margin-left:5px}
+  .cust{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cust .in{font-family:var(--mono);color:var(--text);margin-left:8px}
+  .chip{justify-self:start;font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:20px;white-space:nowrap;background:var(--surface3);color:var(--muted)}
+  .row.rip .chip{color:var(--accent);background:var(--accent-dim)}
+  .row.done .chip{color:var(--green);background:var(--green-dim)}
+  .msg{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .row.warn .msg{color:var(--warn)}.row.late .msg{color:#f87171;font-weight:600}
+  .msg b{font-family:var(--mono);color:var(--text);font-weight:600}
+  .sec{padding:8px 14px 4px;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
+  .empty{padding:40px 22px;color:var(--faint);font-size:14px;grid-column:1/-1}
+  .clean{grid-column:1/-1;padding:60px;text-align:center;color:var(--green);font-size:22px;font-weight:700}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Print queue · all machines</h1>
+  <div class="sum"><span class="pill"><i class="dot d-dl"></i>Downloaded <b id="sDl">0</b></span><span class="pill"><i class="dot d-rip"></i>RIP'd <b id="sRip">0</b></span><span class="pill"><i class="dot d-ok"></i>Printed today <b id="sOk">0</b></span><span class="pill" id="stuckPill" hidden><i class="dot d-bad"></i>Needs attention <b id="sBad">0</b></span></div>
+  <div class="right"><span id="upd">—</span><a href="/admin">← Dashboard</a></div>
+</header>
+<main id="board"><div class="empty">Loading…</div></main>
+<script>
+  // Same stage thresholds as the agent: Downloaded→RIP'd 30/60 min, RIP'd→Printed 45/90 min.
+  const STUCK={dl:[30,60],rip:[45,90]};
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const mins=iso=>iso?Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000)):0;
+  const ago=iso=>{const m=mins(iso);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.floor(m/60),r=m%60;return h+' h'+(r?' '+r+' min':'')+' ago';};
+  const clock=iso=>{try{return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}catch(e){return ''}};
+  const stage=it=>it.printed_at?'done':it.ripped_at?'rip':'dl';
+  function row(it){
+    const st=stage(it),copies=it.copies||1,n=it.printed_count||0; let msg='',flag='';
+    if(st==='dl'){const m=mins(it.assigned_at);flag=m>=STUCK.dl[1]?'late':m>=STUCK.dl[0]?'warn':'';msg=`Downloaded ${ago(it.assigned_at)} · `+(flag?"not RIP'd yet":'waiting for RIP');}
+    else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+(copies>1?` · <b>${n} of ${copies}</b> printed`:'');}
+    else msg=`Printed ${clock(it.printed_at)} · <b>${esc(it.printed_machine||it.machine)}</b> · ${esc(it.printed_operator||it.operator||'')}`+(copies>1?` · <b>${copies} of ${copies}</b>`:'')+(it.manual?' · manual':'')+(it.move_error?' · <span style="color:var(--warn)">not moved to BASILDI</span>':'');
+    const ic=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
+    return `<div class="row ${st} ${flag}"><span class="ic">${ic}</span><span class="code">${esc(it.code||it.name)}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}</span><span class="cust" title="${esc(it.name)}">${esc(it.cust||it.name)}${it.inch?`<span class="in">${esc(it.inch)}</span>`:''}${copies>1?` ×${copies}`:''}</span><span class="chip">${chip}</span><span class="msg">${msg}</span></div>`;
+  }
+  function render(data){
+    const board=document.getElementById('board'); let html=''; let dl=0,rip=0,ok=0,bad=0;
+    const names=Object.keys(data.machines||{}).sort();
+    for(const m of names){
+      const items=data.machines[m]; const open=items.filter(i=>!i.printed_at), done=items.filter(i=>i.printed_at).sort((a,b)=>(b.printed_at||'').localeCompare(a.printed_at||''));
+      const mdl=open.filter(i=>!i.ripped_at).length; dl+=mdl; rip+=open.length-mdl; ok+=done.length;
+      for(const i of open){const st=stage(i);const mm=st==='dl'?mins(i.assigned_at):mins(i.ripped_at);if(mm>=(st==='dl'?STUCK.dl[0]:STUCK.rip[0]))bad++;}
+      const op=[...new Set(items.map(i=>i.operator).filter(Boolean))].join(', ');
+      html+=`<section class="machine"><div class="mh"><span class="name">${esc(m)}</span><span class="op">${esc(op)}</span><span class="cnt"><span><i class="dot d-dl"></i>${mdl}</span><span><i class="dot d-rip"></i>${open.length-mdl}</span><span><i class="dot d-ok"></i>${done.length}</span></span></div>`;
+      if(open.length) html+=open.map(row).join('');
+      else html+=`<div class="sec" style="color:var(--green)">Nothing in progress</div>`;
+      if(done.length) html+=`<div class="sec">Printed today · ${done.length}</div>`+done.slice(0,6).map(row).join('');
+      html+=`</section>`;
+    }
+    if(!names.length) html=`<div class="clean">Day is clean — nothing in any queue.</div>`;
+    board.innerHTML=html;
+    document.getElementById('sDl').textContent=dl;document.getElementById('sRip').textContent=rip;document.getElementById('sOk').textContent=ok;
+    document.getElementById('sBad').textContent=bad;document.getElementById('stuckPill').hidden=!bad;
+    document.getElementById('upd').textContent='updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+  async function load(){try{const r=await fetch('/api/queue/all',{credentials:'same-origin'});if(r.status===401||r.redirected){location.href='/login';return;}const d=await r.json();if(d.status==='ok')render(d);}catch(e){}}
+  load(); setInterval(load,5000);
+</script>
+</body>
+</html>

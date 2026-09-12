@@ -171,6 +171,41 @@ def init_db():
         )
     """)
 
+    # Per-machine sheet queue (Downloaded → RIP'd → Printed ✓), one row per
+    # (machine, Dropbox file). Lives here so every agent, the wall board and
+    # Order Tracker see the same list. Timestamps: UTC ISO with offset.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sheet_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine TEXT NOT NULL,
+            operator TEXT DEFAULT '',
+            path TEXT NOT NULL,
+            name TEXT NOT NULL,
+            code TEXT DEFAULT '',
+            part INTEGER DEFAULT 1,
+            total INTEGER DEFAULT 1,
+            copies INTEGER DEFAULT 1,
+            inch TEXT DEFAULT '',
+            cust TEXT DEFAULT '',
+            hot_path TEXT DEFAULT '',
+            assigned_at TEXT NOT NULL,
+            ripped_at TEXT,
+            printed_at TEXT,
+            printed_count INTEGER DEFAULT 0,
+            extra_scans INTEGER DEFAULT 0,
+            manual INTEGER DEFAULT 0,
+            printed_machine TEXT DEFAULT '',
+            printed_operator TEXT DEFAULT '',
+            moved_to TEXT DEFAULT '',
+            move_error TEXT DEFAULT '',
+            ot_ripped TEXT DEFAULT '',
+            ot_printed TEXT DEFAULT '',
+            cleared INTEGER DEFAULT 0,
+            UNIQUE(machine, path)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sheet_queue_code ON sheet_queue(code)")
+
     # Migration: add machine_type column to machines if missing
     try:
         conn.execute("ALTER TABLE machines ADD COLUMN machine_type TEXT DEFAULT ''")
@@ -1023,6 +1058,108 @@ def extract_store_code(filename: str) -> str:
     if override:
         return override
     return "UNRECOGNIZED"
+
+
+# ── Sheet queue: per-machine work list (Downloaded → RIP'd → Printed ✓) ──
+
+def _q_dict(row):
+    if row is None:
+        return None
+    d = dict(row)
+    d["manual"] = bool(d.get("manual"))
+    d["cleared"] = bool(d.get("cleared"))
+    return d
+
+
+def queue_assign(machine: str, operator: str, path: str, name: str, meta: dict,
+                 hot_path: str, copies: int, now: str) -> dict:
+    """Downloaded on this machine. Downloading the same file again resets the row
+    (a fresh re-print of that sheet)."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO sheet_queue (machine, operator, path, name, code, part, total, copies,
+                                 inch, cust, hot_path, assigned_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(machine, path) DO UPDATE SET
+            operator=excluded.operator, name=excluded.name, code=excluded.code,
+            part=excluded.part, total=excluded.total, copies=excluded.copies,
+            inch=excluded.inch, cust=excluded.cust, hot_path=excluded.hot_path,
+            assigned_at=excluded.assigned_at,
+            ripped_at=NULL, printed_at=NULL, printed_count=0, extra_scans=0, manual=0,
+            printed_machine='', printed_operator='', moved_to='', move_error='',
+            ot_ripped='', ot_printed='', cleared=0
+    """, (machine, operator or "", path, name, meta.get("code") or "", meta.get("part", 1),
+          meta.get("total", 1), copies, meta.get("inch", ""), meta.get("cust", ""), hot_path or "", now))
+    conn.commit()
+    row = conn.execute("SELECT * FROM sheet_queue WHERE machine = ? AND path = ?", (machine, path)).fetchone()
+    conn.close()
+    return _q_dict(row)
+
+
+def queue_list(machine: str) -> list:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM sheet_queue WHERE machine = ? AND cleared = 0 ORDER BY assigned_at",
+                        (machine,)).fetchall()
+    conn.close()
+    return [_q_dict(r) for r in rows]
+
+
+def queue_all() -> list:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM sheet_queue WHERE cleared = 0 ORDER BY machine, assigned_at").fetchall()
+    conn.close()
+    return [_q_dict(r) for r in rows]
+
+
+def queue_get(qid: int):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM sheet_queue WHERE id = ?", (qid,)).fetchone()
+    conn.close()
+    return _q_dict(row)
+
+
+_Q_FIELDS = {"operator", "hot_path", "ripped_at", "printed_at", "printed_count", "extra_scans", "manual",
+             "printed_machine", "printed_operator", "moved_to", "move_error", "ot_ripped", "ot_printed", "cleared"}
+
+
+def queue_update(qid: int, **fields):
+    fields = {k: v for k, v in fields.items() if k in _Q_FIELDS}
+    if not fields:
+        return
+    conn = get_connection()
+    conn.execute("UPDATE sheet_queue SET " + ", ".join(f"{k} = ?" for k in fields) + " WHERE id = ?",
+                 (*fields.values(), qid))
+    conn.commit()
+    conn.close()
+
+
+def queue_delete(qid: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM sheet_queue WHERE id = ?", (qid,))
+    conn.commit()
+    conn.close()
+
+
+def queue_find_by_code(code: str, part=None) -> list:
+    """All (non-cleared) rows for an order code, any machine — a scan at one oven may
+    belong to a sheet another machine downloaded."""
+    conn = get_connection()
+    q = "SELECT * FROM sheet_queue WHERE cleared = 0 AND upper(code) = upper(?)"
+    args = [code]
+    if part is not None:
+        q += " AND part = ?"
+        args.append(part)
+    rows = conn.execute(q + " ORDER BY assigned_at", args).fetchall()
+    conn.close()
+    return [_q_dict(r) for r in rows]
+
+
+def queue_clear(machine: str):
+    """'Clear printed' on the agent: hide finished rows (kept for history)."""
+    conn = get_connection()
+    conn.execute("UPDATE sheet_queue SET cleared = 1 WHERE machine = ? AND printed_at IS NOT NULL", (machine,))
+    conn.commit()
+    conn.close()
 
 
 # ── Dropbox printed registry: who printed a file (keyed by its BASILDI path) ──

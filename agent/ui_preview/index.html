@@ -656,7 +656,7 @@
   }
   function closeMenus(){document.querySelectorAll('.qpop').forEach(p=>p.remove());}
   function openMenu(row){
-    closeMenus(); const it=QITEMS.find(i=>i.id===row.dataset.id); if(!it)return;
+    closeMenus(); const it=QITEMS.find(i=>String(i.id)===row.dataset.id); if(!it)return;
     const pop=document.createElement('div'); pop.className='qpop';
     // Printed rows: the claim was already released by the scan, so only Remove makes sense.
     const acts=[['redownload','⬇ Download again to hot folder'],...(it.printed_at?(it.moved_to?[]:[['move_printed','📁 Move to BASILDI (retry)']]):[['mark_printed','✓ Mark printed (camera missed it)'],['release','↩ Release — let another machine take it']]),['remove','✕ Remove from this list']];

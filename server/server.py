@@ -28,6 +28,9 @@ from database import search_jobs, get_completed_jobs, get_daily_stats, get_repor
 from database import get_unrecognized_files, set_store_override, KNOWN_STORE_CODES
 from database import get_store_cell_details
 from database import record_dropbox_printed, get_dropbox_printed
+from database import (queue_assign, queue_list, queue_all, queue_get, queue_update, queue_delete,
+                      queue_find_by_code, queue_clear)
+from sheet_names import parse_sheet_name, has_part
 from database import create_nest, unnest, start_nest_printing, complete_nest
 from database import get_job_by_id, get_jobs_by_nest, delete_machine
 from database import update_machine_warehouse, update_machine_type, get_warehouses, create_warehouse, delete_warehouse
@@ -1117,6 +1120,180 @@ async def dropbox_move(req: Request):
         return {"status": "ok", "result": result, "path": moved_path}
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+# ── Sheet queue: per-machine work list (Downloaded → RIP'd → Printed ✓) ──
+# Kept on the server so every agent, the wall board (/queue) and Order Tracker see
+# the same list. The agent only reports events; moving to BASILDI and telling OT
+# happen here.
+
+PRINTED_FOLDER = "BASILDI"
+
+
+def _q_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _move_to_basildi(src: str, machine: str, operator: str) -> str:
+    """Move a printed file into <its folder>/BASILDI (created if missing), release
+    the claim and remember who printed it. Returns the file's new path."""
+    folder, base = src.rsplit("/", 1)
+    dst = f"{folder}/{PRINTED_FOLDER}/{base}"
+    try:
+        result = dbx.move(src, dst)
+    except Exception:
+        dbx.ensure_folder(f"{folder}/{PRINTED_FOLDER}")
+        result = dbx.move(src, dst)
+    dbx.release(src)
+    moved = ((result or {}).get("metadata") or {}).get("path_display") or dst
+    record_dropbox_printed(moved, machine, operator)
+    return moved
+
+
+def _q_report_ot(item: dict, stage: str):
+    r = update_sheet(item["code"] or item["name"], item["part"], item["total"], item["copies"], stage,
+                     item.get("printed_machine") or item["machine"],
+                     item.get("printed_operator") or item.get("operator", ""),
+                     item["name"], item.get("printed_count"))
+    queue_update(item["id"], **{"ot_" + stage: "ok" if r["ok"] else r["message"][:120]})
+
+
+def _q_move(item: dict):
+    try:
+        moved = _move_to_basildi(item["path"], item.get("printed_machine") or item["machine"],
+                                 item.get("printed_operator") or item.get("operator", ""))
+        queue_update(item["id"], moved_to=moved, move_error="")
+    except Exception as e:
+        dbx.release(item["path"])  # not moved, but drop the lock
+        queue_update(item["id"], move_error=str(e)[:200])
+
+
+def _q_finish_printed(item: dict, machine: str, operator: str, manual: bool = False) -> dict:
+    """The sheet came out of the oven: stamp who, move to BASILDI, tell Order Tracker."""
+    queue_update(item["id"], printed_at=_q_now(), printed_machine=machine, printed_operator=operator,
+                 manual=1 if manual else 0)
+    _q_move(queue_get(item["id"]))
+    _q_report_ot(queue_get(item["id"]), "printed")
+    return queue_get(item["id"])
+
+
+@app.post("/api/queue/assign")
+async def queue_assign_ep(req: Request):
+    """Agent downloaded a file into its hot folder → Downloaded on that machine."""
+    body = await req.json() or {}
+    machine = (body.get("machine") or "").strip()
+    path = (body.get("path") or "").strip()
+    if not machine or not path:
+        return JSONResponse({"status": "error", "message": "machine and path required"}, status_code=400)
+    name = path.rsplit("/", 1)[-1]
+    meta = parse_sheet_name(name)
+    copies = int(body.get("copies") or meta["copies"] or 1)
+    item = queue_assign(machine, body.get("operator", ""), path, name, meta, body.get("hot_path", ""), copies, _q_now())
+    dbx.claim(path, machine, body.get("operator", ""))
+    return {"status": "ok", "item": item}
+
+
+@app.get("/api/queue")
+async def queue_list_ep(machine: str = Query(...)):
+    return {"status": "ok", "items": queue_list(machine)}
+
+
+@app.post("/api/queue/ripped")
+async def queue_ripped_ep(req: Request):
+    """Agent saw the file in Flexi's RIPLOG → RIP'd (reported to Order Tracker)."""
+    import asyncio
+    body = await req.json() or {}
+    item = queue_get(int(body.get("id") or 0))
+    if not item:
+        return JSONResponse({"status": "error", "message": "not in queue"}, status_code=404)
+    if not item["ripped_at"] and not item["printed_at"]:
+        queue_update(item["id"], ripped_at=_q_now())
+        await asyncio.to_thread(_q_report_ot, queue_get(item["id"]), "ripped")
+    return {"status": "ok", "item": queue_get(item["id"])}
+
+
+@app.post("/api/queue/scan")
+async def queue_scan_ep(req: Request):
+    """Oven camera (or the preview's scan box) read a sheet. Accepts 'PRO3956',
+    'PRO3956 (2-5)', 'PRO3956-2/5' or a full file name. The scanning machine's own
+    row is preferred, but a sheet another machine downloaded still counts — the
+    oven is the truth."""
+    import asyncio
+    body = await req.json() or {}
+    raw = (body.get("code") or "").strip()
+    machine = (body.get("machine") or "").strip()
+    operator = (body.get("operator") or "").strip()
+    meta = parse_sheet_name(raw)
+    code, part = meta["code"], (meta["part"] if has_part(raw) else None)
+    if not code:
+        return {"status": "unknown", "code": raw}
+    cands = queue_find_by_code(code, part)
+    if not cands:
+        return {"status": "unknown", "code": code, "part": part}
+    open_ = [c for c in cands if not c["printed_at"]]
+    if not open_:
+        it = cands[-1]
+        queue_update(it["id"], extra_scans=(it.get("extra_scans") or 0) + 1)
+        return {"status": "already", "item": queue_get(it["id"])}
+    open_.sort(key=lambda c: 0 if c["machine"] == machine else 1)
+    it = open_[0]
+    n = (it.get("printed_count") or 0) + 1
+    queue_update(it["id"], printed_count=n)
+    if n >= (it.get("copies") or 1):
+        item = await asyncio.to_thread(_q_finish_printed, queue_get(it["id"]), machine or it["machine"],
+                                       operator or it.get("operator", ""), False)
+        return {"status": "ok", "item": item, "done": True}
+    return {"status": "ok", "item": queue_get(it["id"]), "done": False}
+
+
+@app.post("/api/queue/action")
+async def queue_action_ep(req: Request):
+    import asyncio
+    body = await req.json() or {}
+    item = queue_get(int(body.get("id") or 0))
+    action = (body.get("action") or "").strip()
+    if not item:
+        return JSONResponse({"status": "error", "message": "not in queue"}, status_code=404)
+    machine = body.get("machine") or item["machine"]
+    if action == "release":          # let another machine take it
+        dbx.release(item["path"])
+        queue_delete(item["id"])
+    elif action == "remove":
+        queue_delete(item["id"])
+    elif action == "mark_printed":   # camera missed it
+        queue_update(item["id"], printed_count=item.get("copies") or 1)
+        await asyncio.to_thread(_q_finish_printed, queue_get(item["id"]), machine,
+                                body.get("operator") or item.get("operator", ""), True)
+    elif action == "move_printed":   # retry the BASILDI move
+        await asyncio.to_thread(_q_move, item)
+    else:
+        return JSONResponse({"status": "error", "message": "unknown action"}, status_code=400)
+    return {"status": "ok", "items": queue_list(machine)}
+
+
+@app.post("/api/queue/clear")
+async def queue_clear_ep(req: Request):
+    body = await req.json() or {}
+    machine = (body.get("machine") or "").strip()
+    if not machine:
+        return JSONResponse({"status": "error", "message": "machine required"}, status_code=400)
+    queue_clear(machine)
+    return {"status": "ok", "items": queue_list(machine)}
+
+
+@app.get("/api/queue/all")
+async def queue_all_ep():
+    """Wall board: every machine's open queue (session-protected, not for agents)."""
+    by_machine: dict = {}
+    for it in queue_all():
+        by_machine.setdefault(it["machine"], []).append(it)
+    return {"status": "ok", "machines": by_machine, "now": _q_now()}
+
+
+@app.get("/queue")
+async def serve_queue_board():
+    return FileResponse(os.path.join(STATIC_DIR, "queue.html"))
 
 
 @app.post("/api/sheet-status")

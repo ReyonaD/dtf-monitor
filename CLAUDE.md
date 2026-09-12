@@ -75,6 +75,19 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 
+## Server-side sheet queue (`/api/queue/*`, built 2026-09-12)
+The per-machine work list lives in SQLite table `sheet_queue` (one row per machine+file), so
+every agent, the wall board **`/queue`** (`static/queue.html`, session-protected, auto-refresh
+5 s, linked from the dashboard header) and Order Tracker see the same thing. Agents only report
+events: `assign` (after download → Downloaded, also claims), `ripped` (agent's RIPLOG watcher →
+server tells OT), `scan` (oven camera / preview box → server stamps who, moves the file to
+BASILDI, tells OT; a scan at machine X's oven can complete a sheet another machine downloaded
+— the oven is the truth), `action` (release/remove/mark_printed/move_printed), `clear`.
+`GET /api/queue?machine=` returns the list; `GET /api/queue/all` feeds the board. Timestamps are
+UTC ISO **with offset** (the UI parses them, naive strings would be off by the TZ). File-name
+parsing is `server/sheet_names.py` (JS twin `parseFile` in the preview — keep in sync). The
+preview no longer keeps `queue.json`.
+
 ## Sheet progress → Order Tracker (`POST /api/sheet-status`, built 2026-09-12)
 Agent queue events go **through this server** to OT (the OT API key never leaves the server):
 `{code, part, total, copies, stage: ripped|printed, machine, operator, fileName, printedCount}`
