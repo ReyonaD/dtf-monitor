@@ -129,9 +129,10 @@
   .folder:active{transform:scale(.99)}
   .folder .fi{width:16px;flex:none;color:var(--faint)}
   .folder .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .folder .fcnt{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:20px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
-  .folder .fcnt.zero{opacity:.45}
-  .folder.active .fcnt{color:var(--accent-soft)}
+  .folder .fcnt{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--text);background:var(--surface3);border:1px solid var(--border2);border-radius:20px;min-width:26px;height:20px;padding:0 7px;display:inline-grid;place-items:center;font-variant-numeric:tabular-nums;flex:none}
+  .folder .fcnt:empty{display:none}
+  .folder .fcnt.zero{color:var(--faint);background:transparent;border-color:var(--border);font-weight:600}
+  .folder.active .fcnt{color:#fff;background:var(--accent);border-color:var(--accent)}
   .folder.active{background:var(--accent-dim);color:var(--text);border-color:rgba(139,92,246,.35)}
   .folder.active .fi{color:var(--accent-soft)}
   .folder.uvfolder .fi{color:var(--uv)}
