@@ -29,6 +29,10 @@
   .spacer{flex:1}
   .chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--muted);white-space:nowrap}
   .chip b{color:var(--text);font-weight:600}
+  .chipbtn{appearance:none;cursor:pointer;font-family:var(--ui);transition:border-color .14s var(--ease-out),background .14s var(--ease-out)}
+  .chipbtn .pen{color:var(--faint);font-size:11px}
+  @media(hover:hover){.chipbtn:hover{border-color:rgba(139,92,246,.4);background:var(--accent-dim)}.chipbtn:hover .pen{color:var(--accent-soft)}}
+  .chipbtn:active{transform:scale(.97)}
   .machine{font-family:var(--mono);font-weight:600;color:var(--accent-soft);letter-spacing:.4px}
   .gear{appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--muted);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;margin-left:6px;transition:background .14s var(--ease-out),color .14s var(--ease-out),border-color .14s var(--ease-out),transform .3s var(--ease-out)}
   @media(hover:hover){.gear:hover{background:var(--accent-dim);color:var(--accent-soft);border-color:rgba(139,92,246,.4);transform:rotate(60deg)}}
@@ -125,6 +129,9 @@
   .folder:active{transform:scale(.99)}
   .folder .fi{width:16px;flex:none;color:var(--faint)}
   .folder .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .folder .fcnt{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:20px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+  .folder .fcnt.zero{opacity:.45}
+  .folder.active .fcnt{color:var(--accent-soft)}
   .folder.active{background:var(--accent-dim);color:var(--text);border-color:rgba(139,92,246,.35)}
   .folder.active .fi{color:var(--accent-soft)}
   .folder.uvfolder .fi{color:var(--uv)}
@@ -281,7 +288,7 @@
     <button class="gear" id="gearBtn" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <div class="spacer"></div>
     <div class="chip"><span class="dot"></span> Machine <b class="machine" id="mMachine">—</b></div>
-    <div class="chip">Operator <b id="mOperator">—</b></div>
+    <button class="chip chipbtn" id="opChip" title="Change operator (just the name — nothing else)">Operator <b id="mOperator">—</b> <span class="pen">✎</span></button>
   </div>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue <span class="cnt">0</span></button>
@@ -337,6 +344,18 @@
     </div>
   </div>
 
+  <!-- operator-only quick change: no other setting is touched -->
+  <div class="modal" id="opModal" hidden>
+    <div class="sheet" style="width:min(380px,92vw)">
+      <div class="sheet-h"><b>Who is printing?</b><button class="sheet-x" id="opClose" title="Close">✕</button></div>
+      <div class="sheet-b">
+        <label class="fld"><span>Operator name</span><input id="opInput" placeholder="e.g. EMRE" autocomplete="off"></label>
+        <div class="grp" style="margin-top:2px;text-transform:none;letter-spacing:0;font-weight:500">Shown on everything this machine prints from now on.</div>
+      </div>
+      <div class="sheet-f"><span class="savemsg" id="opMsg"></span><button class="btn-ghost" id="opCancel">Cancel</button><button class="btn-primary" id="opSave">Save</button></div>
+    </div>
+  </div>
+
   <div class="modal" id="settings" hidden>
     <div class="sheet">
       <div class="sheet-h"><b>⚙ Settings</b><button class="sheet-x" id="setClose" title="Close">✕</button></div>
@@ -368,6 +387,13 @@
   let PRINTEDMAP={}; // order code → Set(parts) already in this folder's BASILDI sub-folder
   let ORDERS=[], SUBS=[], CATS=[], api=null, cfg={machine:'—',operator:'—',hotFolder:'',browseRoot:'/PRODUCTION'}, curPath='/PRODUCTION';
   const storesCache={};
+  // printable-file count per store folder, shown next to the folder in the rail
+  // (one cached list call per folder; refreshed with the folder auto-refresh)
+  const COUNTS={};
+  async function loadCounts(stores){
+    const res=await Promise.all((stores||[]).map(s=>api.list_folder(s.path).catch(()=>null)));
+    (stores||[]).forEach((s,i)=>{const r=res[i];if(r&&r.status==='ok')COUNTS[s.path]=(r.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name)).length;});
+  }
   const lastSeg=p=>(p||'').split('/').filter(Boolean).slice(-1)[0]||'PRODUCTION';
   function categoryOf(path){const root=cfg.browseRoot;if(!path||path===root)return root;const rel=path.slice(root.length).split('/').filter(Boolean);return rel.length?root+'/'+rel[0]:root;}
   async function ensureStores(cat){const root=cfg.browseRoot;if(cat===root)return CATS;if(storesCache[cat])return storesCache[cat];try{const r=await api.list_folder(cat);if(r&&r.status==='ok'){const f=(r.entries||[]).filter(e=>e.type==='folder');storesCache[cat]=f;return f;}}catch(e){}return [];}
@@ -491,6 +517,8 @@
     const stores=await ensureStores(categoryOf(path));
     render(); renderRail(path, stores);
     stampFresh();
+    // counts arrive a moment later; re-draw the rail only if we're still here
+    loadCounts(stores).then(()=>{ if(curPath===path && !searchMode) renderRail(path, stores); });
   }
   let reloading=false;
   function stampFresh(){const el=document.getElementById('freshts');if(el)el.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}
@@ -506,6 +534,7 @@
         await loadPrinted();
         const known=new Set(ORDERS.flatMap(o=>o.sheets.map(s=>s.path))); [...sel].forEach(p=>{ if(!known.has(p)) sel.delete(p); });
         const stores=await ensureStores(categoryOf(curPath));
+        await loadCounts(stores);
         const g=document.getElementById('grid'); const st=g?g.scrollTop:0;
         render(); renderRail(curPath, stores); if(g)g.scrollTop=st;
         stampFresh();
@@ -524,7 +553,7 @@
     }
     // 2) persistent folder list for the active category (stays put while you drill in)
     const lab=document.createElement('div'); lab.className='raillabel'; lab.textContent=catName; el.appendChild(lab);
-    (stores||[]).forEach(s=>{const isUV=/^UV/i.test(s.name);const active=(path===s.path||path.startsWith(s.path+'/'));const d=document.createElement('div');d.className='folder'+(isUV?' uvfolder':'')+(active?' active':'');d.dataset.path=s.path;d.innerHTML=`<span class="fi">▸</span><span class="nm">${s.name}</span>`;d.addEventListener('click',()=>navigate(s.path));el.appendChild(d);});
+    (stores||[]).forEach(s=>{const isUV=/^UV/i.test(s.name);const active=(path===s.path||path.startsWith(s.path+'/'));const d=document.createElement('div');d.className='folder'+(isUV?' uvfolder':'')+(active?' active':'');d.dataset.path=s.path;const n=COUNTS[s.path];d.innerHTML=`<span class="fi">▸</span><span class="nm">${s.name}</span><span class="fcnt${n===0?' zero':''}" title="${n==null?'':n+' file'+(n===1?'':'s')+' to print'}">${n==null?'':n}</span>`;d.addEventListener('click',()=>navigate(s.path));el.appendChild(d);});
     if(!(stores||[]).length) el.innerHTML+='<div style="padding:8px 10px;color:var(--faint);font-size:12px">—</div>';
   }
   async function boot(){
@@ -581,6 +610,23 @@
   });
   searchClear.addEventListener('click',exitSearch);
   searchInput.addEventListener('keydown',e=>{if(e.key==='Escape')exitSearch();});
+
+  // ── operator quick change (only the name is saved; other settings untouched) ──
+  const opModal=document.getElementById('opModal'), opInput=document.getElementById('opInput'), opMsg=document.getElementById('opMsg');
+  function openOp(){ opInput.value=cfg.operator||''; opMsg.textContent=''; opMsg.style.color=''; opModal.hidden=false; setTimeout(()=>{opInput.focus();opInput.select();},30); }
+  function closeOp(){ opModal.hidden=true; }
+  async function saveOp(){
+    const v=opInput.value.trim(); if(!v){ opMsg.style.color='#ef4444'; opMsg.textContent='Enter a name'; return; }
+    const res=await api.save_config({operator:v});
+    if(res&&res.status==='ok'){ cfg=res.config; document.getElementById('mOperator').textContent=cfg.operator; opMsg.textContent='Saved ✓'; setTimeout(closeOp,400); }
+    else { opMsg.style.color='#ef4444'; opMsg.textContent='Error: '+((res&&res.message)||'save failed'); }
+  }
+  document.getElementById('opChip').addEventListener('click',openOp);
+  document.getElementById('opClose').addEventListener('click',closeOp);
+  document.getElementById('opCancel').addEventListener('click',closeOp);
+  document.getElementById('opSave').addEventListener('click',saveOp);
+  opInput.addEventListener('keydown',e=>{ if(e.key==='Enter')saveOp(); if(e.key==='Escape')closeOp(); });
+  opModal.addEventListener('click',e=>{ if(e.target===opModal) closeOp(); });
 
   // ── settings modal ──
   const settingsEl=document.getElementById('settings');
