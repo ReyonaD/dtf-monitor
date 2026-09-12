@@ -67,7 +67,10 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   file's new path). `/api/dropbox/list` and `/search` return `printedBy {machine, operator, at}`
   next to `claimedBy`, so **every PC's agent** shows "Printed · MACHINE · OPERATOR" on files
   in BASILDI. The file name is NOT changed. A store folder = "still to print"; a partly
-  printed order shows only its remaining sheets plus a "✓ n/N printed" badge. The Download button is called **Download**
+  printed order shows only its remaining sheets plus a "✓ n/N printed" badge.
+  **Decision (2026-09-12): ONE fixed `BASILDI/` per folder** — no dated / per-operator
+  sub-folders. Operators used to hand-make folders like `09-12-26-Aslan basildi`; that habit is
+  replaced by the server record (who/when lives in `dropbox_printed`, not in folder names). The Download button is called **Download**
   (it downloads to the hot folder; printing happens in Flexi) and shows a live progress bar.
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
