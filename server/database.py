@@ -200,11 +200,17 @@ def init_db():
             move_error TEXT DEFAULT '',
             ot_ripped TEXT DEFAULT '',
             ot_printed TEXT DEFAULT '',
+            ot_downloaded TEXT DEFAULT '',
             cleared INTEGER DEFAULT 0,
             UNIQUE(machine, path)
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sheet_queue_code ON sheet_queue(code)")
+    try:  # migration for tables created before ot_downloaded existed
+        conn.execute("ALTER TABLE sheet_queue ADD COLUMN ot_downloaded TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
     # Migration: add machine_type column to machines if missing
     try:
@@ -1119,7 +1125,8 @@ def queue_get(qid: int):
 
 
 _Q_FIELDS = {"operator", "hot_path", "ripped_at", "printed_at", "printed_count", "extra_scans", "manual",
-             "printed_machine", "printed_operator", "moved_to", "move_error", "ot_ripped", "ot_printed", "cleared"}
+             "printed_machine", "printed_operator", "moved_to", "move_error", "ot_ripped", "ot_printed",
+             "ot_downloaded", "cleared"}
 
 
 def queue_update(qid: int, **fields):

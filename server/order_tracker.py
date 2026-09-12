@@ -100,15 +100,15 @@ def get_order_status(order_code: str) -> Optional[dict]:
 def update_sheet(order_code: str, part: int, total: int, copies: int, stage: str,
                  machine_name: str = "", operator: str = "", file_name: str = "",
                  printed_count: Optional[int] = None) -> dict:
-    """Per-sheet progress from the agent queue: stage = 'ripped' | 'printed'.
+    """Per-sheet progress from the agent queue: stage = 'downloaded' | 'ripped' | 'printed'.
     Order Tracker keeps one row per sheet and rolls the order up itself
-    ("RIP'd 1/5" → "Printed 3/5" → "Printed"). Returns {ok, message}."""
+    ("Downloaded 1/5" → "RIP'd 1/5" → "Printed 3/5" → "Printed"). Returns {ok, message}."""
     if not API_KEY:
         logger.error("ORDER_TRACKER_API_KEY not set; skipping sheet update")
         return {"ok": False, "message": "Order Tracker API key not configured"}
     body = {
         "orderCode": order_code, "stage": stage,
-        "printStatus": "Printed" if stage == "printed" else "RIP'd",
+        "printStatus": {"printed": "Printed", "ripped": "RIP'd"}.get(stage, "Downloaded"),
         "part": part, "total": total, "copies": copies,
         "machine": machine_name, "operator": operator, "fileName": file_name,
     }

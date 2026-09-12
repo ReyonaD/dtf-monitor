@@ -79,7 +79,8 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
 The per-machine work list lives in SQLite table `sheet_queue` (one row per machine+file), so
 every agent, the wall board **`/queue`** (`static/queue.html`, session-protected, auto-refresh
 5 s, linked from the dashboard header) and Order Tracker see the same thing. Agents only report
-events: `assign` (after download → Downloaded, also claims), `ripped` (agent's RIPLOG watcher →
+events: `assign` (after download → Downloaded, also claims, and tells OT stage `downloaded` so its
+chase list shows "Downloaded on M1"), `ripped` (agent's RIPLOG watcher →
 server tells OT), `scan` (oven camera / preview box → server stamps who, moves the file to
 BASILDI, tells OT; a scan at machine X's oven can complete a sheet another machine downloaded
 — the oven is the truth), `action` (release/remove/mark_printed/move_printed), `clear`.

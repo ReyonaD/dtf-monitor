@@ -1191,7 +1191,9 @@ async def queue_assign_ep(req: Request):
     copies = int(body.get("copies") or meta["copies"] or 1)
     item = queue_assign(machine, body.get("operator", ""), path, name, meta, body.get("hot_path", ""), copies, _q_now())
     dbx.claim(path, machine, body.get("operator", ""))
-    return {"status": "ok", "item": item}
+    import asyncio
+    await asyncio.to_thread(_q_report_ot, item, "downloaded")  # → OT chase list: "Downloaded on M1"
+    return {"status": "ok", "item": queue_get(item["id"])}
 
 
 @app.get("/api/queue")
