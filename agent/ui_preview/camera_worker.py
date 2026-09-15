@@ -47,16 +47,19 @@ def open_cam(index):
     # renegotiate the stream (~6 s each on a C920), so setting it here saves ~12 s.
     t0 = time.time()
     try:
-        cap = cv2.VideoCapture(index, cv2.CAP_MSMF, [cv2.CAP_PROP_FRAME_WIDTH, 1920, cv2.CAP_PROP_FRAME_HEIGHT, 1080])
+        # 720p @ 10 fps: decoding the camera stream is the main CPU cost, and a 2.5 cm QR at
+        # 20-30 cm is still ~150 px wide at 720p - plenty for the detector.
+        cap = cv2.VideoCapture(index, cv2.CAP_MSMF, [cv2.CAP_PROP_FRAME_WIDTH, 1280, cv2.CAP_PROP_FRAME_HEIGHT, 720, cv2.CAP_PROP_FPS, 10])
     except Exception:
         cap = cv2.VideoCapture(index, cv2.CAP_MSMF)
     if not cap.isOpened():
         cap.release()
         return None
     w, h = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    if (w, h) != (1920.0, 1080.0):  # constructor params ignored → fall back to set()
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    if (w, h) != (1280.0, 720.0):  # constructor params ignored → fall back to set()
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 10)
     emit({"event": "info", "msg": f"opened in {time.time()-t0:.1f}s at {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}"})
     return cap
 
@@ -136,12 +139,11 @@ def main():
             if status != "live":
                 status = "live"
                 emit({"event": "status", "status": status, "frames": frames, "error": "", "index": a.index})
-            if frames % 6 == 0:
-                # ~5 detections/s on a half-size frame: the film crawls out of the oven, so
-                # this catches every sheet while keeping the printer PC's CPU nearly idle
+            if frames % 2 == 0:
+                # ~5 detections/s (10 fps capture): the film crawls out of the oven, so this
+                # catches every sheet while keeping the printer PC's CPU nearly idle
                 try:
-                    half = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
-                    ok, codes, _pts, _ = det.detectAndDecodeMulti(half)
+                    ok, codes, _pts, _ = det.detectAndDecodeMulti(frame)
                 except Exception:
                     ok, codes = False, []
                 if ok:
