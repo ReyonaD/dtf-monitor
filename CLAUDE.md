@@ -86,6 +86,14 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   the parent stops it via a stop-file (`camera_stop.flag`) so it releases the camera cleanly;
   (5) the Windows Camera app (or any other app) holding the device gives MSMF error
   `-1072875772`. Test QR: `cv2.QRCodeEncoder` output of "PRO7807 (1-3)" decodes fine.
+  **CPU budget (measured 2026-09-15, 16-core PC):** worker idle **0.09 core**, UI 0.03 — after
+  capturing 720p @ 10 fps (the FPS constructor param is ignored, so it is re-set after open),
+  `cv2.setNumThreads(1)`, BELOW_NORMAL priority and a motion gate (160x90 gray diff; detect at
+  most 4x/s while moving + one sweep every 3 s). Before tuning it was ~1 core (1080p@30fps,
+  detection every 3rd frame). Detection cost: ~15 ms empty / ~40 ms with a QR at 720p; a QR
+  smaller than ~110 px did NOT decode in tests — keep 720p full-frame detection.
+  Kill stray previews/workers with PowerShell `Stop-Process -Name pythonw,python` (a Git-Bash
+  `taskkill` loop silently missed them once, leaving 4 workers fighting over the camera).
 - **`++` at the very start of a file name = urgent/priority order.** Parsed in `sheet_names.py` and
   the preview's `parseFile`; shown as a red URGENT badge in Print Files (sorted first), the Queue,
   and `/queue`; stored in `sheet_queue.urgent`; forwarded to OT (`urgent: true`), which sets the
