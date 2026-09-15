@@ -87,6 +87,9 @@
   .qloc{font-size:11px;color:var(--accent-soft);font-weight:600;display:flex;align-items:center;gap:5px;margin-top:-2px}
   .loc{margin-left:8px;font-size:11px;color:var(--accent-soft);font-weight:600}
   #crumbBack{cursor:pointer;color:var(--accent-soft);font-weight:600}
+  .urg{display:inline-block;margin-left:7px;padding:1px 6px;border-radius:5px;background:#ef4444;color:#fff;font-family:var(--ui);font-size:9.5px;font-weight:800;letter-spacing:.5px;vertical-align:middle}
+  .qcard.urgent{box-shadow:inset 0 2px 0 #ef4444}
+  .row.urgent .dcode{color:#f87171}
   .code{font-family:var(--mono);font-weight:700;font-size:12.5px;color:var(--accent-soft);background:var(--accent-dim);padding:2px 8px;border-radius:6px;letter-spacing:.3px}
   .status{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px}
   .status .sd{width:6px;height:6px;border-radius:50%}
@@ -419,18 +422,19 @@
     const pm=name.match(/\((\d+)\s*-\s*(\d+)\)/); let total=1,part=1; if(pm){const a=parseInt(pm[1],10),b=parseInt(pm[2],10); if(a<=b){part=a;total=b;}else{total=a;part=b;}}
     const im=name.match(/-(\d+)\s*INCH/i), inch=im?im[1]+'"':'';
     const uv=/(^|[^A-Za-z])UV\b/i.test(name);
+    const urgent=/^\s*\+\+/.test(name); // "++" at the very start of the file name = priority order
     let after=name; const cut=name.search(/\(\d+\s*-\s*\d+\)/);
     if(cut>=0) after=name.slice(cut).replace(/^\(\d+\s*-\s*\d+\)\s*/,'');
     else {const c2=name.search(/\(\d+\s*[xX]?\)/); if(c2>=0) after=name.slice(c2).replace(/^\(\d+\s*[xX]?\)\s*[-–]?\s*/,'');}
-    const cust=after.replace(/^\(\d+\)\s*[-–]?\s*/,'').replace(/-\d+\s*INCH.*$/i,'').replace(/\.[a-z]+$/i,'').replace(/^[\s-]+/,'').trim();
-    return {code,copies,total,part,inch,uv,cust};
+    const cust=after.replace(/^\s*\+\+\s*/,'').replace(/^\(\d+\)\s*[-–]?\s*/,'').replace(/-\d+\s*INCH.*$/i,'').replace(/\.[a-z]+$/i,'').replace(/^[\s-]+/,'').trim();
+    return {code,copies,total,part,inch,uv,cust,urgent};
   }
   function groupOrders(files){
     const map=new Map();
-    for(const f of files){const pf=parseFile(f.name),code=pf.code||f.name;let o=map.get(code);if(!o){o={code,cust:'',status:'ready',sheets:[]};map.set(code,o);}o.sheets.push({p:pf.part,total:pf.total,inch:pf.inch,copies:pf.copies,here:true,uv:pf.uv,name:f.name,path:f.path,claimedBy:f.claimedBy||null,printedBy:f.printedBy||null,modified:f.modified||null});if(pf.cust&&!o.cust)o.cust=pf.cust;}
+    for(const f of files){const pf=parseFile(f.name),code=pf.code||f.name;let o=map.get(code);if(!o){o={code,cust:'',status:'ready',sheets:[]};map.set(code,o);}o.sheets.push({p:pf.part,total:pf.total,inch:pf.inch,copies:pf.copies,here:true,uv:pf.uv,urgent:pf.urgent,name:f.name,path:f.path,claimedBy:f.claimedBy||null,printedBy:f.printedBy||null,modified:f.modified||null});if(pf.cust&&!o.cust)o.cust=pf.cust;}
     const arr=[...map.values()];
-    for(const o of arr){o.sheets.sort((a,b)=>a.p-b.p);const t=Math.max(...o.sheets.map(s=>s.total||1));o.sheets.forEach(s=>s.total=t);o.locked=o.sheets.some(s=>s.claimedBy);o.allLocked=o.sheets.every(s=>s.claimedBy);if(o.sheets.every(s=>s.printedBy))o.status='printed';const pp=(o.sheets[0].path||'').split('/');o.loc=pp.length>1?pp[pp.length-2]:'';o.modified=o.sheets.map(s=>s.modified).filter(Boolean).sort().slice(-1)[0]||null;}
-    arr.sort((a,b)=>a.code.localeCompare(b.code));return arr;
+    for(const o of arr){o.sheets.sort((a,b)=>a.p-b.p);const t=Math.max(...o.sheets.map(s=>s.total||1));o.sheets.forEach(s=>s.total=t);o.locked=o.sheets.some(s=>s.claimedBy);o.allLocked=o.sheets.every(s=>s.claimedBy);o.urgent=o.sheets.some(s=>s.urgent);if(o.sheets.every(s=>s.printedBy))o.status='printed';const pp=(o.sheets[0].path||'').split('/');o.loc=pp.length>1?pp[pp.length-2]:'';o.modified=o.sheets.map(s=>s.modified).filter(Boolean).sort().slice(-1)[0]||null;}
+    arr.sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0)||a.code.localeCompare(b.code));return arr; // urgent first
   }
   const cx=c=>c>1?`<span class="cx">×${c}</span>`:'';
   // who printed (from the server's BASILDI registry — visible on every PC's agent)
@@ -451,14 +455,14 @@
     const right=multi?total+' sheets':(o.sheets[0].inch||'');
     const loc=(searchMode&&o.loc)?`<div class="qloc">📁 ${o.loc}</div>`:'';
     const nLocked=o.sheets.filter(s=>s.claimedBy).length;
-    return `<div class="qcard${o.allLocked?' locked':''}${selClass(o)}" data-code="${o.code}" style="--bar:${storeColor(o.code)}"><div class="qtop"><span class="qcode">${o.code}</span><span class="qright ${multi?'qmulti':''}">${right}</span></div><div class="qcust">${o.cust||'—'}</div>${loc}<div class="qsheets">${rows}</div><div class="qfoot">${statusChip(o)}${o.locked?`<span class="qaway" style="color:var(--warn)">🔒 ${o.allLocked?'assigned':nLocked+'/'+total+' assigned'}</span>`:''}${printedBadge(o,'qaway')}</div></div>`;
+    return `<div class="qcard${o.allLocked?' locked':''}${selClass(o)}${o.urgent?' urgent':''}" data-code="${o.code}" style="--bar:${storeColor(o.code)}"><div class="qtop"><span class="qcode">${o.code}</span>${o.urgent?'<span class="urg">URGENT</span>':''}<span class="qright ${multi?'qmulti':''}">${right}</span></div><div class="qcust">${o.cust||'—'}</div>${loc}<div class="qsheets">${rows}</div><div class="qfoot">${statusChip(o)}${o.locked?`<span class="qaway" style="color:var(--warn)">🔒 ${o.allLocked?'assigned':nLocked+'/'+total+' assigned'}</span>`:''}${printedBadge(o,'qaway')}</div></div>`;
   }
   function drow(o){
     const total=o.sheets[0].total;
     const chips=o.sheets.map(s=>`<span class="dchip${s.claimedBy?' lk':''}${sel.has(s.path)?' on':''}" data-path="${s.path}" title="${total>1?'Take just this sheet':''}"><span class="dp">#${s.p}${total>1?'/'+total:''}</span><span class="di">${s.claimedBy?'🔒 '+s.claimedBy.machine:(s.inch||'—')}</span></span>${s.printedBy&&whoOrder(o).includes(',')?`<span class="dp" style="color:var(--ready)">✓ ${whoP(s.printedBy)}</span>`:''}${s.copies>1?cx(s.copies):''}`).join('');
     const loc=(searchMode&&o.loc)?`<span class="loc">📁 ${o.loc}</span>`:'';
     const md=`<span class="dmod">${o.modified?fmtDate(o.modified):'—'}</span>`;
-    return `<div class="row${o.allLocked?' locked':''}${selClass(o)}" data-code="${o.code}"><span class="dcheck">${selState(o)==='some'?'–':'✓'}</span><span class="dcode">${o.code}</span><span class="dcust">${o.cust||'—'}${loc}${printedBadge(o,'loc')}</span>${md}<span class="dsheets">${chips}</span>${statusChip(o)}</div>`;
+    return `<div class="row${o.allLocked?' locked':''}${selClass(o)}${o.urgent?' urgent':''}" data-code="${o.code}"><span class="dcheck">${selState(o)==='some'?'–':'✓'}</span><span class="dcode">${o.code}${o.urgent?'<span class="urg">URGENT</span>':''}</span><span class="dcust">${o.cust||'—'}${loc}${printedBadge(o,'loc')}</span>${md}<span class="dsheets">${chips}</span>${statusChip(o)}</div>`;
   }
   const ftile=f=>`<button class="ftile" data-path="${f.path}">📁 <span class="fnm">${f.name}</span> <span class="far">›</span></button>`;
   function render(){
@@ -685,7 +689,7 @@
     else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp+otMark(it.ot_ripped);}
     else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'')+otMark(it.ot_printed);}
     const icon=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
-    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><button class="qmore" title="More">⋯</button></div>`;
+    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.urgent?'<span class="urg">URGENT</span>':''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><button class="qmore" title="More">⋯</button></div>`;
   }
   function renderQueue(){
     const list=document.getElementById('qlist'); if(!list)return;

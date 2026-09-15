@@ -15,6 +15,7 @@ _CODE_PLAIN = re.compile(r"\b([A-Za-z]{1,4}\d{3,})\b")
 _COPIES = re.compile(r"\((\d+)\s*[xX]\)")
 _PART = re.compile(r"\((\d+)\s*-\s*(\d+)\)|(?<![\w/])(\d+)\s*/\s*(\d+)(?![\w/])")
 _INCH = re.compile(r"-(\d+)\s*INCH", re.I)
+_URGENT = re.compile(r"^\s*\+\+")  # "++" at the very start of the name = priority order
 
 
 def has_part(s: str) -> bool:
@@ -36,7 +37,7 @@ def parse_sheet_name(name: str) -> dict:
     im = _INCH.search(name)
     inch = (im.group(1) + '"') if im else ""
     return {"code": code, "part": part, "total": total, "copies": copies, "inch": inch,
-            "cust": customer_of(name)}
+            "cust": customer_of(name), "urgent": bool(_URGENT.match(name))}
 
 
 def customer_of(name: str) -> str:
@@ -49,6 +50,7 @@ def customer_of(name: str) -> str:
         if c2:
             after = re.sub(r"^\(\d+\s*[xX]?\)\s*[-–]?\s*", "", name[c2.start():])
     after = re.sub(r"^\(\d+\)\s*[-–]?\s*", "", after)  # "(2x) - (1) Name" -> "Name"
+    after = re.sub(r"^\s*\+\+\s*", "", after)
     after = re.sub(r"-\d+\s*INCH.*$", "", after, flags=re.I)
     after = re.sub(r"\.[a-z]+$", "", after, flags=re.I)
     return re.sub(r"^[\s-]+", "", after).strip()

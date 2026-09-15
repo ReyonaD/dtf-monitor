@@ -36,6 +36,7 @@
   .row.done .ic{border-color:var(--green);background:var(--green);color:#06231a}
   .code{font-family:var(--mono);font-weight:700;font-size:13px;white-space:nowrap}
   .code small{font-weight:600;font-size:11px;color:var(--faint);margin-left:5px}
+  .urg{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:5px;background:var(--red);color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.5px;vertical-align:middle}
   .cust{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cust .in{font-family:var(--mono);color:var(--text);margin-left:8px}
   .chip{justify-self:start;font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:20px;white-space:nowrap;background:var(--surface3);color:var(--muted)}
@@ -71,7 +72,7 @@
     else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+(copies>1?` · <b>${n} of ${copies}</b> printed`:'');}
     else msg=`Printed ${clock(it.printed_at)} · <b>${esc(it.printed_machine||it.machine)}</b> · ${esc(it.printed_operator||it.operator||'')}`+(copies>1?` · <b>${copies} of ${copies}</b>`:'')+(it.manual?' · manual':'')+(it.move_error?' · <span style="color:var(--warn)">not moved to BASILDI</span>':'');
     const ic=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
-    return `<div class="row ${st} ${flag}"><span class="ic">${ic}</span><span class="code">${esc(it.code||it.name)}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}</span><span class="cust" title="${esc(it.name)}">${esc(it.cust||it.name)}${it.inch?`<span class="in">${esc(it.inch)}</span>`:''}${copies>1?` ×${copies}`:''}</span><span class="chip">${chip}</span><span class="msg">${msg}</span></div>`;
+    return `<div class="row ${st} ${flag}"><span class="ic">${ic}</span><span class="code">${esc(it.code||it.name)}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.urgent?'<span class="urg">URGENT</span>':''}</span><span class="cust" title="${esc(it.name)}">${esc(it.cust||it.name)}${it.inch?`<span class="in">${esc(it.inch)}</span>`:''}${copies>1?` ×${copies}`:''}</span><span class="chip">${chip}</span><span class="msg">${msg}</span></div>`;
   }
   function render(data){
     const board=document.getElementById('board'); let html=''; let dl=0,rip=0,ok=0,bad=0;

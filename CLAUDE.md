@@ -72,6 +72,10 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   sub-folders. Operators used to hand-make folders like `09-12-26-Aslan basildi`; that habit is
   replaced by the server record (who/when lives in `dropbox_printed`, not in folder names). The Download button is called **Download**
   (it downloads to the hot folder; printing happens in Flexi) and shows a live progress bar.
+- **`++` at the very start of a file name = urgent/priority order.** Parsed in `sheet_names.py` and
+  the preview's `parseFile`; shown as a red URGENT badge in Print Files (sorted first), the Queue,
+  and `/queue`; stored in `sheet_queue.urgent`; forwarded to OT (`urgent: true`), which sets the
+  order's `urgent` flag (never un-sets it).
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 

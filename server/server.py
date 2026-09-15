@@ -1155,7 +1155,7 @@ def _q_report_ot(item: dict, stage: str):
     r = update_sheet(item["code"] or item["name"], item["part"], item["total"], item["copies"], stage,
                      item.get("printed_machine") or item["machine"],
                      item.get("printed_operator") or item.get("operator", ""),
-                     item["name"], item.get("printed_count"))
+                     item["name"], item.get("printed_count"), bool(item.get("urgent")))
     queue_update(item["id"], **{"ot_" + stage: "ok" if r["ok"] else r["message"][:120]})
 
 
