@@ -113,6 +113,8 @@ def main():
     misses = 0
     last_status = 0.0
     last_preview = 0.0
+    want_preview = False   # only while the UI has the Live panel open (flag file next to --preview)
+    last_flag_check = 0.0
     status = "starting"
     while True:
         if a.stopfile and os.path.exists(a.stopfile):
@@ -164,7 +166,10 @@ def main():
                         if code and now - seen.get(code, 0) > a.debounce:
                             seen[code] = now
                             emit({"event": "code", "code": code})
-            if a.preview and now - last_preview > 0.33:
+            if a.preview and now - last_flag_check > 1.0:
+                last_flag_check = now
+                want_preview = os.path.exists(a.preview + ".want")
+            if a.preview and want_preview and now - last_preview > 0.1:  # ~10 fps = capture rate
                 last_preview = now
                 try:
                     small = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)

@@ -769,13 +769,13 @@
       line.title=st.error||'';
       const live=document.getElementById('camLive');
       if(!live.hidden){
-        const b64=await api.camera_frame();
-        if(b64) document.getElementById('camImg').src='data:image/jpeg;base64,'+b64;
         document.getElementById('camCap').textContent= st.status==='live'?`live · ${Math.round(camFps)} fps`+(st.lastCode?` · last read ${st.lastCode}`:''):(st.error||st.status);
       }
     }catch(e){}
   }
-  document.getElementById('camLiveBtn').addEventListener('click',()=>{const l=document.getElementById('camLive');l.hidden=!l.hidden;});
+  document.getElementById('camLiveBtn').addEventListener('click',()=>{const l=document.getElementById('camLive');l.hidden=!l.hidden;if(api)api.camera_live(!l.hidden);});
+  let camFrameTimer=null;
+  setInterval(async()=>{ if(!api||document.hidden) return; const live=document.getElementById('camLive'); if(live.hidden) return; try{const b64=await api.camera_frame(); if(b64) document.getElementById('camImg').src='data:image/jpeg;base64,'+b64;}catch(e){} }, 100); // ~10 fps while the panel is open
   setInterval(()=>{ if(api && !document.hidden) pollCamera(); }, 300);
 
   const scanInput=document.getElementById('scanInput');

@@ -498,6 +498,18 @@ class Api:
         except Exception:
             return None
 
+    def camera_live(self, on):
+        """UI opened/closed the Live panel: the worker only encodes preview frames while it is open."""
+        flag = CAM_PREVIEW + ".want"
+        try:
+            if on:
+                open(flag, "w").close()
+            elif os.path.exists(flag):
+                os.remove(flag)
+        except Exception:
+            pass
+        return {"status": "ok"}
+
     def camera_restart(self):
         start_camera()
         return self.camera_status()
