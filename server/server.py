@@ -27,7 +27,7 @@ from database import get_all_machines, get_jobs_for_machine, get_all_active_jobs
 from database import search_jobs, get_completed_jobs, get_daily_stats, get_report, get_report_details, get_store_report
 from database import get_unrecognized_files, set_store_override, KNOWN_STORE_CODES
 from database import get_store_cell_details
-from database import record_dropbox_printed, get_dropbox_printed
+from database import record_dropbox_printed, get_dropbox_printed, delete_dropbox_printed
 from database import (queue_assign, queue_list, queue_all, queue_get, queue_update, queue_delete,
                       queue_find_by_code, queue_clear)
 from sheet_names import parse_sheet_name, has_part
@@ -45,7 +45,7 @@ from database import (
     get_customer_files_for_machine, match_customer_file_by_code,
 )
 # Order Tracker integration (replaces the old Google Sheets writer).
-from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status, update_sheet
+from order_tracker import update_orders_for_jobs, extract_order_code, get_order_status, update_sheet, reset_order
 import dropbox_service as dbx
 
 logger = logging.getLogger(__name__)
@@ -1283,6 +1283,40 @@ async def queue_clear_ep(req: Request):
         return JSONResponse({"status": "error", "message": "machine required"}, status_code=400)
     queue_clear(machine)
     return {"status": "ok", "items": queue_list(machine)}
+
+
+@app.post("/api/queue/reset")
+async def queue_reset_ep(req: Request):
+    """Test/reset tool (X-Api-Key = OT_API_KEY): undo everything the floor recorded for an
+    order — queue rows (all machines), BASILDI moves, who-printed records, claims — and tell
+    Order Tracker to forget its sheets, so the order can be printed again from scratch."""
+    import asyncio
+    if req.headers.get("X-Api-Key", "") != os.environ.get("OT_API_KEY", "") or not os.environ.get("OT_API_KEY"):
+        return JSONResponse({"status": "error", "message": "unauthorized"}, status_code=401)
+    body = await req.json() or {}
+    code = (body.get("code") or "").strip()
+    if not code:
+        return JSONResponse({"status": "error", "message": "code required"}, status_code=400)
+    rows = queue_find_by_code(code)
+    def work():
+        out = {"rows": 0, "moved_back": [], "move_errors": []}
+        for it in rows:
+            moved = it.get("moved_to") or ""
+            if moved and "/BASILDI/" in moved:
+                back = moved.replace("/BASILDI/", "/", 1)
+                try:
+                    dbx.move(moved, back)
+                    out["moved_back"].append(back)
+                except Exception as e:
+                    out["move_errors"].append(f"{moved}: {str(e)[:120]}")
+                delete_dropbox_printed(moved)
+            dbx.release(it["path"])
+            queue_delete(it["id"])
+            out["rows"] += 1
+        out["ot"] = reset_order(code)
+        return out
+    result = await asyncio.to_thread(work)
+    return {"status": "ok", "code": code, **result}
 
 
 @app.get("/api/queue/all")

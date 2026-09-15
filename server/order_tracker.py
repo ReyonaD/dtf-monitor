@@ -135,6 +135,20 @@ def update_sheet(order_code: str, part: int, total: int, copies: int, stage: str
         return {"ok": False, "message": str(e)[:120]}
 
 
+def reset_order(order_code: str) -> dict:
+    """Test/reset: drop every sheet the floor reported for this order (OT DELETE /integrations/print)."""
+    if not API_KEY:
+        return {"ok": False, "message": "Order Tracker API key not configured"}
+    try:
+        resp = requests.delete(f"{API_URL}/integrations/print", params={"orderCode": order_code},
+                               headers={"X-Api-Key": API_KEY}, timeout=TIMEOUT)
+        if resp.status_code == 200:
+            return {"ok": True, "message": resp.json().get("sheetsDeleted", 0)}
+        return {"ok": False, "message": f"Order Tracker {resp.status_code}"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)[:120]}
+
+
 def update_orders_for_jobs(jobs: list[dict], machine_name: str, operator: str = ""):
     """
     Process completed jobs — extract order codes and mark them printed.

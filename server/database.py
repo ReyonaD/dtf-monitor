@@ -1186,6 +1186,13 @@ def record_dropbox_printed(path: str, machine: str = "", operator: str = ""):
     conn.close()
 
 
+def delete_dropbox_printed(path: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM dropbox_printed WHERE path_lower = ?", (path.lower(),))
+    conn.commit()
+    conn.close()
+
+
 def get_dropbox_printed(paths) -> dict:
     """{path_lower: {machine, operator, at}} for the given Dropbox paths (case-insensitive)."""
     keys = [p.lower() for p in paths if p]
