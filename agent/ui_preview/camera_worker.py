@@ -131,9 +131,12 @@ def main():
             if status != "live":
                 status = "live"
                 emit({"event": "status", "status": status, "frames": frames, "error": "", "index": a.index})
-            if frames % 3 == 0:
+            if frames % 4 == 0:
+                # detect on a half-size frame: a ~2.5 cm QR at 20-30 cm is still large,
+                # and this keeps CPU low enough not to stutter the printer PC
                 try:
-                    ok, codes, _pts, _ = det.detectAndDecodeMulti(frame)
+                    half = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+                    ok, codes, _pts, _ = det.detectAndDecodeMulti(half)
                 except Exception:
                     ok, codes = False, []
                 if ok:
@@ -142,10 +145,10 @@ def main():
                         if code and now - seen.get(code, 0) > a.debounce:
                             seen[code] = now
                             emit({"event": "code", "code": code})
-            if a.preview and now - last_preview > 0.5:
+            if a.preview and now - last_preview > 0.25:
                 last_preview = now
                 try:
-                    small = cv2.resize(frame, (640, 360))
+                    small = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)
                     tmp = a.preview[:-4] + ".tmp.jpg" if a.preview.lower().endswith(".jpg") else a.preview + ".tmp.jpg"  # imwrite picks the codec from the extension
                     if cv2.imwrite(tmp, small, [cv2.IMWRITE_JPEG_QUALITY, 60]):
                         os.replace(tmp, a.preview)

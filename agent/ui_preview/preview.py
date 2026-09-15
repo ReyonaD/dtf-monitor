@@ -295,10 +295,15 @@ def start_camera():
         CAM.update(status="error", error="opencv-python is not installed on this PC", index=idx)
         return
     CAM.update(status="starting", error="", index=idx, frames=0, last_line=time.time())
+    # windowless interpreter for the worker (no console pops up behind the agent)
+    exe = sys.executable
+    cand = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    if exe.lower().endswith("python.exe") and os.path.isfile(cand):
+        exe = cand
     try:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.Popen(
-            [sys.executable, "-u", WORKER, "--index", str(idx), "--preview", CAM_PREVIEW,
+            [exe, "-u", WORKER, "--index", str(idx), "--preview", CAM_PREVIEW,
              "--debounce", str(SCAN_DEBOUNCE_S), "--stopfile", CAM_STOPFILE, "--log", CAM_LOG],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
             creationflags=flags, cwd=HERE)

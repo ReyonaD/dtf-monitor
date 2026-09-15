@@ -771,7 +771,7 @@
     }catch(e){}
   }
   document.getElementById('camLiveBtn').addEventListener('click',()=>{const l=document.getElementById('camLive');l.hidden=!l.hidden;});
-  setInterval(()=>{ if(api && !document.hidden) pollCamera(); }, 500);
+  setInterval(()=>{ if(api && !document.hidden) pollCamera(); }, 300);
 
   const scanInput=document.getElementById('scanInput');
   document.getElementById('scanBtn').addEventListener('click',()=>{doScan(scanInput.value.trim());scanInput.value='';});
