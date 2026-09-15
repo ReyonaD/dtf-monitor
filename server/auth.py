@@ -82,6 +82,7 @@ PUBLIC_PATHS = {
     "/api/queue/scan",                    # agent queue: oven camera read a sheet's QR
     "/api/queue/action",                  # agent queue: release / remove / mark printed / retry move
     "/api/queue/clear",                   # agent queue: hide printed rows
+    "/api/queue/reset",                   # test/reset tool — protected by X-Api-Key (OT_API_KEY) inside the handler
     "/login",
     "/favicon.ico",
     "/api/history",
