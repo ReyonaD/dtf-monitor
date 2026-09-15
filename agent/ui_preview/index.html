@@ -746,11 +746,13 @@
     loadQueue();
   }
   const CAMLBL={off:'off',starting:'starting…',live:'live',error:'error'};
+  let camPrev={frames:0,t:0}, camFps=0; // fps from the frame counter delta between polls
   async function pollCamera(){
     if(!api) return;
     try{
       const ev=await api.camera_events(); for(const e of (ev||[])) handleScan(e.result, e.code);
       const st=await api.camera_status();
+      {const t=Date.now(); if(camPrev.t && st.frames>=camPrev.frames && t>camPrev.t){const f=(st.frames-camPrev.frames)/((t-camPrev.t)/1000); camFps=camFps?camFps*0.7+f*0.3:f;} camPrev={frames:st.frames,t}; if(st.status!=='live'){camFps=0;}}
       const cls=st.status==='live'?'live':st.status==='error'?'bad':st.status==='starting'?'starting':'';
       document.getElementById('camTxt').textContent=CAMLBL[st.status]||st.status;
       const d=document.getElementById('camDot');
@@ -766,7 +768,7 @@
       if(!live.hidden){
         const b64=await api.camera_frame();
         if(b64) document.getElementById('camImg').src='data:image/jpeg;base64,'+b64;
-        document.getElementById('camCap').textContent= st.status==='live'?`live · ${st.frames} frames`+(st.lastCode?` · last read ${st.lastCode}`:''):(st.error||st.status);
+        document.getElementById('camCap').textContent= st.status==='live'?`live · ${Math.round(camFps)} fps`+(st.lastCode?` · last read ${st.lastCode}`:''):(st.error||st.status);
       }
     }catch(e){}
   }
