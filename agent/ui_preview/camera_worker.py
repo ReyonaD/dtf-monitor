@@ -7,7 +7,7 @@ on this process's main thread, so the agent's UI thread is never involved.
 
 Protocol (stdout, one JSON object per line):
   {"event":"status","status":"starting|live|error","frames":N,"error":"...","index":I}
-  {"event":"code","code":"PRO3956 (2-5)"}              # a new QR read (debounced)
+  {"event":"code","code":"PRO3956 (2-5)"}              # a new QR read (once per appearance in view)
 A small preview JPEG is written atomically to --preview every ~0.5 s.
 
 Usage: python camera_worker.py --index 0 --preview C:\\path\\preview.jpg [--debounce 60]
@@ -72,7 +72,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--index", type=int, default=0)
     ap.add_argument("--preview", default="")
-    ap.add_argument("--debounce", type=float, default=60.0)
+    ap.add_argument("--debounce", type=float, default=3.0)  # seconds a code must be OUT of view before it counts again
     ap.add_argument("--stopfile", default="")   # parent creates this file to ask for a clean exit
     ap.add_argument("--seconds", type=float, default=0)  # tests: exit cleanly after N seconds
     ap.add_argument("--debug", action="store_true")     # per-read timing on stderr
@@ -163,9 +163,13 @@ def main():
                 if ok:
                     for code in codes:
                         code = (code or "").strip()
-                        if code and now - seen.get(code, 0) > a.debounce:
-                            seen[code] = now
+                        if not code:
+                            continue
+                        # re-arm logic: a code counts once while it stays in view; after it has
+                        # been out of view for `debounce` seconds, seeing it again is a new sheet
+                        if now - seen.get(code, 0) > a.debounce:
                             emit({"event": "code", "code": code})
+                        seen[code] = now
             if a.preview and now - last_flag_check > 1.0:
                 last_flag_check = now
                 want_preview = os.path.exists(a.preview + ".want")

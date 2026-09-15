@@ -189,12 +189,12 @@ def _in_riplog(name, txt):
 # The webcam is owned by a CHILD PROCESS (camera_worker.py): Windows' MSMF capture
 # only behaves when the device is opened on a process's main thread, and pywebview
 # owns this process's main thread. The worker prints one JSON line per event
-# ({"event":"code"} for each new QR read, debounced 60 s; {"event":"status"} once a
+# ({"event":"code"} for each new QR read — once per appearance in view; {"event":"status"} once a
 # second) and writes a small preview JPEG; this supervisor posts each read to the
 # server (/api/queue/scan — the same call the "type a code" box makes), keeps the
 # last status for the UI, and restarts the worker if it dies or goes quiet.
 import subprocess
-SCAN_DEBOUNCE_S = 60
+SCAN_DEBOUNCE_S = 3  # a code must leave the camera's view for this long before it counts again
 CAM = {"status": "off", "error": "", "index": None, "frames": 0, "last_code": "", "last_at": 0.0,
        "events": [], "lock": threading.Lock(), "proc": None, "gen": 0, "last_line": 0.0}
 CAM_PREVIEW = os.path.join(HERE, "camera_preview.jpg")
