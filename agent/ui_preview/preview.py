@@ -20,11 +20,20 @@ and — in the preview — a simulated oven-camera scan.
 """
 import os
 import re
+import sys
 import json
 import shutil
 import urllib.request
 import urllib.parse
+import base64
+import threading
+import time
 import webview
+
+try:
+    import cv2  # oven camera (QR reader); optional — the UI works without it
+except Exception:  # pragma: no cover
+    cv2 = None
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/1.3"
@@ -39,6 +48,7 @@ DEFAULTS = {
     "machine": os.environ.get("DTF_MACHINE", "PICASSO_M_1"),
     "operator": os.environ.get("DTF_OPERATOR", "EMRE"),
     "riplog": os.environ.get("DTF_RIPLOG", ""),
+    "camera": os.environ.get("DTF_CAMERA", "0"),  # webcam index ("0" = first), or "off"
 }
 
 
@@ -175,6 +185,139 @@ def _in_riplog(name, txt):
     return bool(stem) and stem in txt
 
 
+# ── Oven camera: reads the QR on each sheet as it leaves the oven ────────────
+# The webcam is owned by a CHILD PROCESS (camera_worker.py): Windows' MSMF capture
+# only behaves when the device is opened on a process's main thread, and pywebview
+# owns this process's main thread. The worker prints one JSON line per event
+# ({"event":"code"} for each new QR read, debounced 60 s; {"event":"status"} once a
+# second) and writes a small preview JPEG; this supervisor posts each read to the
+# server (/api/queue/scan — the same call the "type a code" box makes), keeps the
+# last status for the UI, and restarts the worker if it dies or goes quiet.
+import subprocess
+SCAN_DEBOUNCE_S = 60
+CAM = {"status": "off", "error": "", "index": None, "frames": 0, "last_code": "", "last_at": 0.0,
+       "events": [], "lock": threading.Lock(), "proc": None, "gen": 0, "last_line": 0.0}
+CAM_PREVIEW = os.path.join(HERE, "camera_preview.jpg")
+CAM_STOPFILE = os.path.join(HERE, "camera_stop.flag")
+WORKER = os.path.join(HERE, "camera_worker.py")
+
+
+def _cam_stop_proc(proc):
+    """Ask the worker to release the camera and exit; force it only if it ignores us."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        open(CAM_STOPFILE, "w").close()
+        for _ in range(30):
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+        if proc.poll() is None:
+            proc.terminate()
+    except Exception:
+        pass
+    finally:
+        try:
+            os.remove(CAM_STOPFILE)
+        except Exception:
+            pass
+
+
+def _cam_scan(code):
+    try:
+        r = _post("/api/queue/scan", {"code": code, **_who()})
+    except Exception as e:
+        r = {"status": "error", "message": str(e)[:120]}
+    with CAM["lock"]:
+        CAM.update(last_code=code, last_at=time.time())
+        CAM["events"].append({"code": code, "result": r, "at": time.time()})
+        del CAM["events"][:-20]
+
+
+def _cam_reader(proc, gen):
+    """Read the worker's stdout until it exits; ignore output from a superseded worker."""
+    for raw in proc.stdout:
+        if CAM["gen"] != gen:
+            break
+        line = raw.decode("utf-8", "ignore").strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:
+            continue
+        CAM["last_line"] = time.time()
+        if ev.get("event") == "code" and ev.get("code"):
+            _cam_scan(str(ev["code"]).strip())
+        elif ev.get("event") == "status":
+            CAM.update(status=ev.get("status", "?"), error=ev.get("error", ""),
+                       frames=int(ev.get("frames") or 0), index=ev.get("index"))
+    proc.wait()
+    if CAM["gen"] == gen and CAM["proc"] is proc:
+        CAM.update(status="error", error=f"camera worker exited (code {proc.returncode}); restarting…")
+
+
+def _cam_supervisor():
+    """Restart the worker if it exits or stops reporting for 15 s."""
+    while True:
+        time.sleep(5)
+        proc = CAM["proc"]
+        if proc is None:
+            continue
+        dead = proc.poll() is not None
+        # opening the device can take ~10-20 s on MSMF, so be patient before restarting
+        quiet = CAM["last_line"] and time.time() - CAM["last_line"] > 45
+        if dead or quiet:
+            start_camera()
+
+
+_cam_sup_started = False
+
+
+def start_camera():
+    """(Re)start the camera worker from CFG["camera"] ("0", "1", … or "off")."""
+    global _cam_sup_started
+    old = CAM["proc"]
+    CAM["gen"] += 1
+    CAM["proc"] = None
+    _cam_stop_proc(old)
+    sel = str(CFG.get("camera") or "off").strip().lower()
+    if sel in ("", "off", "none", "no"):
+        CAM.update(status="off", error="", index=None, frames=0)
+        return
+    try:
+        idx = int(sel)
+    except ValueError:
+        CAM.update(status="error", error=f'camera setting "{sel}" is not a number (use 0, 1, … or off)')
+        return
+    if cv2 is None:
+        CAM.update(status="error", error="opencv-python is not installed on this PC", index=idx)
+        return
+    CAM.update(status="starting", error="", index=idx, frames=0, last_line=time.time())
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(
+            [sys.executable, "-u", WORKER, "--index", str(idx), "--preview", CAM_PREVIEW,
+             "--debounce", str(SCAN_DEBOUNCE_S), "--stopfile", CAM_STOPFILE],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+            creationflags=flags, cwd=HERE)
+    except Exception as e:
+        CAM.update(status="error", error=f"could not start camera worker: {e}")
+        return
+    CAM["proc"] = proc
+    threading.Thread(target=_cam_reader, args=(proc, CAM["gen"]), daemon=True).start()
+    if not _cam_sup_started:
+        _cam_sup_started = True
+        threading.Thread(target=_cam_supervisor, daemon=True).start()
+
+
+def stop_camera():
+    CAM["gen"] += 1
+    proc, CAM["proc"] = CAM["proc"], None
+    _cam_stop_proc(proc)
+    CAM.update(status="off")
+
+
 class Api:
     def config(self):
         return dict(CFG)
@@ -189,11 +332,14 @@ class Api:
                 continue  # don't overwrite a good value with a blank one
             CFG[k] = v
         _AUTO_RIPLOG["path"] = None
+        cam_before = str(patch.get("camera", CFG.get("camera")))
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(CFG, f, indent=2)
         except Exception as e:
             return {"status": "error", "message": str(e), "config": dict(CFG)}
+        if "camera" in (patch or {}) and cam_before is not None:
+            start_camera()
         return {"status": "ok", "config": dict(CFG)}
 
     def pick_folder(self):
@@ -325,6 +471,31 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    # ── Oven camera ──
+    def camera_status(self):
+        return {"status": CAM["status"], "error": CAM["error"], "index": CAM["index"], "frames": CAM["frames"],
+                "lastCode": CAM["last_code"], "lastAt": CAM["last_at"], "available": cv2 is not None}
+
+    def camera_events(self):
+        """Scan results since the last call (the UI shows the same flash as a typed code)."""
+        with CAM["lock"]:
+            ev, CAM["events"] = list(CAM["events"]), []
+        return ev
+
+    def camera_frame(self):
+        """Latest preview frame as a base64 JPEG (None when the camera is off)."""
+        if CAM["status"] != "live":
+            return None
+        try:
+            with open(CAM_PREVIEW, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        except Exception:
+            return None
+
+    def camera_restart(self):
+        start_camera()
+        return self.camera_status()
+
     def queue_clear_done(self):
         try:
             return _post("/api/queue/clear", {"machine": CFG["machine"]})
@@ -333,6 +504,9 @@ class Api:
 
 
 if __name__ == "__main__":
+    start_camera()
+    import atexit
+    atexit.register(stop_camera)
     webview.create_window(
         "DTF Monitor Agent — Preview",
         os.path.join(HERE, "index.html"),

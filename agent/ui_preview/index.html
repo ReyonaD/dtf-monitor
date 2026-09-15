@@ -251,7 +251,12 @@
   .qempty{padding:40px 18px;color:var(--faint);font-size:13px;line-height:1.7;max-width:560px}
   .qempty b{color:var(--muted)}
   .camline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}.camline b{color:var(--text)}
-  .camdot{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px var(--warn-dim);flex:none}
+  .camdot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+  .camdot.live{background:var(--ready);box-shadow:0 0 0 3px var(--ready-dim)}.camdot.bad{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.2)}.camdot.starting{background:var(--warn);box-shadow:0 0 0 3px var(--warn-dim)}
+  .camlive{position:absolute;right:18px;bottom:72px;width:340px;background:#000;border:1px solid var(--border2);border-radius:10px;overflow:hidden;z-index:10;box-shadow:0 18px 40px -12px rgba(0,0,0,.8)}
+  .camlive[hidden]{display:none}
+  .camlive img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#111}
+  .camcap{font-size:11px;color:var(--muted);padding:5px 9px;background:var(--panel);font-family:var(--mono)}
   .flash{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(6,35,26,.93);color:#fff;animation:fade .12s var(--ease-out)}
   .flash[hidden]{display:none}
   .flash.warn{background:rgba(70,50,6,.94)}.flash.bad{background:rgba(70,14,14,.94)}
@@ -329,14 +334,15 @@
           <div class="crumb"><b>Queue</b> · this machine</div>
           <div class="qstats"><span class="qstat"><i class="sdot s-dl"></i> Downloaded <b id="qsDl">0</b></span><span class="qstat"><i class="sdot s-rip"></i> RIP'd <b id="qsRip">0</b></span><span class="qstat"><i class="sdot s-ok"></i> Printed today <b id="qsDone">0</b></span></div>
           <div class="spacer" style="flex:1"></div>
-          <div class="scanbox" title="Preview: stands in for the oven camera">📷<input id="scanInput" placeholder="Simulate oven-camera read — e.g. PRO3956 (2-5)"><button class="browse" id="scanBtn">Scan</button></div>
+          <span class="qstat" id="camChip" title="Oven camera"><i class="sdot" id="camDot" style="background:var(--faint)"></i> Camera <b id="camTxt">off</b></span><button class="browse" id="camLiveBtn" title="Show what the camera sees">👁 Live</button><div class="scanbox" title="Fallback: type the code if the camera missed a sheet">⌨<input id="scanInput" placeholder="Camera missed it? Type the code — e.g. PRO3956 (2-5)"><button class="browse" id="scanBtn">Scan</button></div>
         </div>
         <div class="qlist" id="qlist"></div>
         <div class="actionbar">
-          <div class="camline"><span class="camdot"></span><span><b>Oven camera</b> · preview mode (reads come from the box above) · RIPLOG <span id="ripState">not configured</span></span></div>
+          <div class="camline"><span class="camdot" id="camDot2"></span><span><b>Oven camera</b> <span id="camLine">off</span> · RIPLOG <span id="ripState">not configured</span></span></div>
           <div class="spacer" style="flex:1"></div>
           <button class="btn-ghost" id="clearDone">Clear printed</button>
         </div>
+        <div class="camlive" id="camLive" hidden><img id="camImg" alt="camera"><div class="camcap" id="camCap">—</div></div>
         <div class="flash" id="scanFlash" hidden><div class="fx"><div class="big"></div><div class="sub"></div></div></div>
       </div>
     </div>
@@ -369,6 +375,7 @@
         <label class="fld"><span>Operator</span><input id="setOperator" placeholder="EMRE"></label>
         <div class="grp">Files</div>
         <label class="fld"><span>Hot folder <small>(where prints are dropped)</small></span><div class="fld-row"><input id="setHot" placeholder="C:\Users\…\DTF-HotFolder"><button class="browse" data-target="setHot" data-kind="folder">Browse…</button></div></label>
+        <label class="fld"><span>Oven camera <small>(webcam number: 0 = first camera · off = disabled)</small></span><input id="setCamera" placeholder="0"></label>
         <label class="fld"><span>RIPLOG file <small>(Flexi RIP log — marks queue items RIP'd)</small></span><div class="fld-row"><input id="setRip" placeholder="blank = auto-detect"><button class="browse" id="ripDetect" type="button">Detect</button><button class="browse" data-target="setRip" data-kind="file">Browse…</button></div></label>
         <div class="grp">Connection</div>
         <label class="fld"><span>Server URL</span><input id="setServer" placeholder="https://dtfproductionstatus.com"></label>
@@ -635,7 +642,7 @@
 
   // ── settings modal ──
   const settingsEl=document.getElementById('settings');
-  const setF={machine:'setMachine',operator:'setOperator',hotFolder:'setHot',riplog:'setRip',server:'setServer',browseRoot:'setRoot'};
+  const setF={machine:'setMachine',operator:'setOperator',hotFolder:'setHot',riplog:'setRip',server:'setServer',browseRoot:'setRoot',camera:'setCamera'};
   function openSettings(){ for(const k in setF){document.getElementById(setF[k]).value=cfg[k]||'';} document.getElementById('setMsg').textContent=''; settingsEl.hidden=false; }
   function closeSettings(){ settingsEl.hidden=true; }
   document.getElementById('gearBtn').addEventListener('click',openSettings);
@@ -726,13 +733,46 @@
   function showFlash(kind,big,sub){flash.className='flash'+(kind==='ok'?'':' '+kind);flash.querySelector('.big').innerHTML=big;flash.querySelector('.sub').textContent=sub;flash.hidden=false;beep(kind);clearTimeout(flashT);flashT=setTimeout(()=>flash.hidden=true,kind==='ok'?1600:2600);}
   async function doScan(code){
     if(!api||!code)return;
-    let r; try{r=await api.queue_scan(code);}catch(e){r={status:'error'};}
+    let r; try{r=await api.queue_scan(code);}catch(e){r={status:'error',message:e.message};}
+    handleScan(r, code);
+  }
+  // ── oven camera: poll the bridge for reads + status; live view on demand ──
+  function handleScan(r, code){
+    if(!r) return;
     if(r.status==='ok'){const it=r.item,cp=it.copies||1;showFlash('ok',`${it.code}${it.total>1?`<small>sheet ${it.part} of ${it.total}</small>`:''}`,r.done?(cp>1?`Printed ✓ · ${cp} of ${cp} copies`:'Printed ✓'):`Copy ${it.printed_count} of ${cp} ✓`);}
     else if(r.status==='already'){showFlash('warn',r.item.code,'Already printed — logged as reprint');}
-    else if(r.status==='unknown'){showFlash('bad',(r.code||code).replace(/</g,'&lt;'),"Unknown code — not in this machine's queue");}
-    else showFlash('bad','Error','Scan failed');
+    else if(r.status==='unknown'){showFlash('bad',(r.code||code||'').replace(/</g,'&lt;'),"Unknown code — not in this machine's queue");}
+    else showFlash('bad','Error',r.message||'Scan failed');
     loadQueue();
   }
+  const CAMLBL={off:'off',starting:'starting…',live:'live',error:'error'};
+  async function pollCamera(){
+    if(!api) return;
+    try{
+      const ev=await api.camera_events(); for(const e of (ev||[])) handleScan(e.result, e.code);
+      const st=await api.camera_status();
+      const cls=st.status==='live'?'live':st.status==='error'?'bad':st.status==='starting'?'starting':'';
+      document.getElementById('camTxt').textContent=CAMLBL[st.status]||st.status;
+      const d=document.getElementById('camDot');
+      d.style.background= cls==='live'?'var(--ready)': cls==='bad'?'#ef4444': cls==='starting'?'var(--warn)':'var(--faint)';
+      document.getElementById('camDot2').className='camdot '+cls;
+      const line=document.getElementById('camLine');
+      line.textContent= st.status==='live'?`live · camera ${st.index} · reads QR codes as sheets leave the oven`+(st.lastCode?` · last: ${st.lastCode}`:'')
+        : st.status==='error'?`error — ${st.error}`
+        : st.status==='starting'?'starting…'
+        : (st.available?'off (⚙ Settings → Oven camera)':'off — opencv-python not installed');
+      line.title=st.error||'';
+      const live=document.getElementById('camLive');
+      if(!live.hidden){
+        const b64=await api.camera_frame();
+        if(b64) document.getElementById('camImg').src='data:image/jpeg;base64,'+b64;
+        document.getElementById('camCap').textContent= st.status==='live'?`live · ${st.frames} frames`+(st.lastCode?` · last read ${st.lastCode}`:''):(st.error||st.status);
+      }
+    }catch(e){}
+  }
+  document.getElementById('camLiveBtn').addEventListener('click',()=>{const l=document.getElementById('camLive');l.hidden=!l.hidden;});
+  setInterval(()=>{ if(api && !document.hidden) pollCamera(); }, 500);
+
   const scanInput=document.getElementById('scanInput');
   document.getElementById('scanBtn').addEventListener('click',()=>{doScan(scanInput.value.trim());scanInput.value='';});
   scanInput.addEventListener('keydown',e=>{if(e.key==='Enter'){doScan(scanInput.value.trim());scanInput.value='';}});

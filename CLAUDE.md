@@ -72,6 +72,20 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   sub-folders. Operators used to hand-make folders like `09-12-26-Aslan basildi`; that habit is
   replaced by the server record (who/when lives in `dropbox_printed`, not in folder names). The Download button is called **Download**
   (it downloads to the hot folder; printing happens in Flexi) and shows a live progress bar.
+- **Oven camera (built 2026-09-15)**: `agent/ui_preview/camera_worker.py` runs as a CHILD PROCESS
+  supervised by `preview.py` (`start_camera` / `_cam_reader` / `_cam_supervisor`). It owns the webcam
+  (OpenCV, MSMF backend), runs `QRCodeDetector.detectAndDecodeMulti` on every 3rd frame, debounces
+  the same code for 60 s, prints one JSON line per event (`code` / `status`) and writes a preview
+  JPEG; the parent posts each code to `/api/queue/scan` (identical to the typed-code box) and shows
+  the same green/amber/red flash. Settings key `camera` = webcam index ("0") or "off"; ⚙ has the field.
+  **Why a process, and gotchas learned the hard way:** (1) MSMF capture opened from a non-main thread
+  in the pywebview process never delivered frames; (2) MSMF rejects `CAP_PROP_*_TIMEOUT_MSEC`
+  (prop 53) — opening with it fails; (3) opening a C920 via MSMF can take **~18 s** (device
+  negotiation; each `cap.set()` after open re-negotiates ~6 s), so the supervisor waits 45 s before
+  calling a worker "quiet"; (4) a worker killed abruptly leaves the device wedged for a while —
+  the parent stops it via a stop-file (`camera_stop.flag`) so it releases the camera cleanly;
+  (5) the Windows Camera app (or any other app) holding the device gives MSMF error
+  `-1072875772`. Test QR: `cv2.QRCodeEncoder` output of "PRO7807 (1-3)" decodes fine.
 - **`++` at the very start of a file name = urgent/priority order.** Parsed in `sheet_names.py` and
   the preview's `parseFile`; shown as a red URGENT badge in Print Files (sorted first), the Queue,
   and `/queue`; stored in `sheet_queue.urgent`; forwarded to OT (`urgent: true`), which sets the
