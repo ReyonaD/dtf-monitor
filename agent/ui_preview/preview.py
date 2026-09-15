@@ -199,6 +199,7 @@ CAM = {"status": "off", "error": "", "index": None, "frames": 0, "last_code": ""
        "events": [], "lock": threading.Lock(), "proc": None, "gen": 0, "last_line": 0.0}
 CAM_PREVIEW = os.path.join(HERE, "camera_preview.jpg")
 CAM_STOPFILE = os.path.join(HERE, "camera_stop.flag")
+CAM_LOG = os.path.join(HERE, "camera_worker.log")  # worker events, for support
 WORKER = os.path.join(HERE, "camera_worker.py")
 
 
@@ -298,7 +299,7 @@ def start_camera():
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.Popen(
             [sys.executable, "-u", WORKER, "--index", str(idx), "--preview", CAM_PREVIEW,
-             "--debounce", str(SCAN_DEBOUNCE_S), "--stopfile", CAM_STOPFILE],
+             "--debounce", str(SCAN_DEBOUNCE_S), "--stopfile", CAM_STOPFILE, "--log", CAM_LOG],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
             creationflags=flags, cwd=HERE)
     except Exception as e:

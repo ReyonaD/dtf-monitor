@@ -50,3 +50,4 @@ agent/ui_preview/queue.json
 # Oven-camera worker runtime files
 agent/ui_preview/camera_preview.jpg
 agent/ui_preview/camera_stop.flag
+agent/ui_preview/camera_worker.log

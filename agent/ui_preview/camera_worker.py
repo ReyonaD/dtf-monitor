@@ -26,8 +26,18 @@ except Exception as e:  # pragma: no cover
     sys.exit(2)
 
 
+LOG = {"path": ""}
+
+
 def emit(obj):
-    print(json.dumps(obj), flush=True)
+    line = json.dumps(obj)
+    print(line, flush=True)
+    if LOG["path"]:
+        try:
+            with open(LOG["path"], "a", encoding="utf-8") as f:
+                f.write(time.strftime("%H:%M:%S ") + line + "\n")
+        except Exception:
+            pass
 
 
 def open_cam(index):
@@ -47,7 +57,7 @@ def open_cam(index):
     if (w, h) != (1920.0, 1080.0):  # constructor params ignored → fall back to set()
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    print(f"[open] {time.time()-t0:.2f}s -> {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}", file=sys.stderr, flush=True)
+    emit({"event": "info", "msg": f"opened in {time.time()-t0:.1f}s at {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}"})
     return cap
 
 
@@ -59,8 +69,16 @@ def main():
     ap.add_argument("--stopfile", default="")   # parent creates this file to ask for a clean exit
     ap.add_argument("--seconds", type=float, default=0)  # tests: exit cleanly after N seconds
     ap.add_argument("--debug", action="store_true")     # per-read timing on stderr
+    ap.add_argument("--log", default="")                # also append events to this file
     a = ap.parse_args()
     t_start = time.time()
+    LOG["path"] = a.log
+    if a.log:
+        try:
+            if os.path.exists(a.log) and os.path.getsize(a.log) > 200_000:
+                os.remove(a.log)
+        except Exception:
+            pass
     def dbg(msg):
         if a.debug:
             print(f"[{time.time()-t_start:6.2f}s] {msg}", file=sys.stderr, flush=True)

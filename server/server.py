@@ -1261,7 +1261,8 @@ async def queue_action_ep(req: Request):
     if action == "release":          # let another machine take it
         dbx.release(item["path"])
         queue_delete(item["id"])
-    elif action == "remove":
+    elif action == "remove":         # off my list — and don't leave the file locked for others
+        dbx.release(item["path"])
         queue_delete(item["id"])
     elif action == "mark_printed":   # camera missed it
         queue_update(item["id"], printed_count=item.get("copies") or 1)
