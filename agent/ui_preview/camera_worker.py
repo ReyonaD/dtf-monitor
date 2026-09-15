@@ -60,7 +60,11 @@ def open_cam(index):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         cap.set(cv2.CAP_PROP_FPS, 10)
-    emit({"event": "info", "msg": f"opened in {time.time()-t0:.1f}s at {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}"})
+    fps = cap.get(cv2.CAP_PROP_FPS) or 0
+    if fps > 15:  # constructor FPS ignored → ask again (one ~6 s renegotiation, once per start)
+        cap.set(cv2.CAP_PROP_FPS, 10)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+    emit({"event": "info", "msg": f"opened in {time.time()-t0:.1f}s at {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {fps:.0f} fps"})
     return cap
 
 
@@ -100,7 +104,10 @@ def main():
               "error": f"camera {a.index} could not be opened (in use by another app?)"})
         sys.exit(3)
 
+    cv2.setNumThreads(1)  # one quiet core-slice, not a burst of threads on the printer PC
     det = cv2.QRCodeDetector()
+    prev_small = None      # motion gate: skip detection while the scene is static
+    last_detect = 0.0
     seen = {}
     frames = 0
     misses = 0
@@ -139,9 +146,14 @@ def main():
             if status != "live":
                 status = "live"
                 emit({"event": "status", "status": status, "frames": frames, "error": "", "index": a.index})
-            if frames % 2 == 0:
-                # ~5 detections/s (10 fps capture): the film crawls out of the oven, so this
-                # catches every sheet while keeping the printer PC's CPU nearly idle
+            # Motion gate: a 160x90 grayscale diff (~0.1 ms) decides whether anything moved.
+            # Detection (~15-40 ms) runs at most 4x/s while the film is moving, plus one
+            # sweep every 3 s regardless — so an idle oven costs practically nothing.
+            small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (160, 90), interpolation=cv2.INTER_AREA)
+            moving = prev_small is not None and float(cv2.absdiff(small, prev_small).mean()) > 2.0
+            prev_small = small
+            if (moving and now - last_detect > 0.25) or now - last_detect > 3.0:
+                last_detect = now
                 try:
                     ok, codes, _pts, _ = det.detectAndDecodeMulti(frame)
                 except Exception:
