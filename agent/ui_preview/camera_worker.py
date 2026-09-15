@@ -83,6 +83,11 @@ def main():
         if a.debug:
             print(f"[{time.time()-t_start:6.2f}s] {msg}", file=sys.stderr, flush=True)
 
+    try:  # run below normal priority: printing/RIP always comes first on this PC
+        import ctypes
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000)  # BELOW_NORMAL
+    except Exception:
+        pass
     emit({"event": "status", "status": "starting", "frames": 0, "error": "", "index": a.index})
     dbg("opening camera")
     cap = open_cam(a.index)
@@ -131,9 +136,9 @@ def main():
             if status != "live":
                 status = "live"
                 emit({"event": "status", "status": status, "frames": frames, "error": "", "index": a.index})
-            if frames % 4 == 0:
-                # detect on a half-size frame: a ~2.5 cm QR at 20-30 cm is still large,
-                # and this keeps CPU low enough not to stutter the printer PC
+            if frames % 6 == 0:
+                # ~5 detections/s on a half-size frame: the film crawls out of the oven, so
+                # this catches every sheet while keeping the printer PC's CPU nearly idle
                 try:
                     half = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
                     ok, codes, _pts, _ = det.detectAndDecodeMulti(half)
@@ -145,7 +150,7 @@ def main():
                         if code and now - seen.get(code, 0) > a.debounce:
                             seen[code] = now
                             emit({"event": "code", "code": code})
-            if a.preview and now - last_preview > 0.25:
+            if a.preview and now - last_preview > 0.33:
                 last_preview = now
                 try:
                     small = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)

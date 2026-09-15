@@ -747,10 +747,13 @@
   }
   const CAMLBL={off:'off',starting:'starting…',live:'live',error:'error'};
   let camPrev={frames:0,t:0}, camFps=0; // fps from the frame counter delta between polls
+  let camTick=0;
   async function pollCamera(){
     if(!api) return;
     try{
       const ev=await api.camera_events(); for(const e of (ev||[])) handleScan(e.result, e.code);
+      const liveOpen=!document.getElementById('camLive').hidden;
+      if(!liveOpen && (camTick++ % 4)) return;   // status chip: every ~1.2 s unless the live view is open
       const st=await api.camera_status();
       {const t=Date.now(); if(camPrev.t && st.frames>=camPrev.frames && t>camPrev.t){const f=(st.frames-camPrev.frames)/((t-camPrev.t)/1000); camFps=camFps?camFps*0.7+f*0.3:f;} camPrev={frames:st.frames,t}; if(st.status!=='live'){camFps=0;}}
       const cls=st.status==='live'?'live':st.status==='error'?'bad':st.status==='starting'?'starting':'';
