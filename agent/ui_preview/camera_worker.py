@@ -146,7 +146,7 @@ def main():
                 last_preview = now
                 try:
                     small = cv2.resize(frame, (640, 360))
-                    tmp = a.preview + ".tmp"
+                    tmp = a.preview[:-4] + ".tmp.jpg" if a.preview.lower().endswith(".jpg") else a.preview + ".tmp.jpg"  # imwrite picks the codec from the extension
                     if cv2.imwrite(tmp, small, [cv2.IMWRITE_JPEG_QUALITY, 60]):
                         os.replace(tmp, a.preview)
                 except Exception:
