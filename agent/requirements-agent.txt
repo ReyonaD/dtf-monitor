@@ -1,0 +1,5 @@
+# New DTF Monitor agent (agent_main.py). Build: pip install -r requirements-agent.txt pyinstaller && pyinstaller build_agent.spec
+pywebview>=6.0
+pythonnet>=3.0        # pywebview's Windows (WebView2/WinForms) backend
+opencv-python<5       # oven camera QR reader (4.x — 5.0 could not open the C920 via MSMF)
+numpy

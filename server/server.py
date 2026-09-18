@@ -17,6 +17,7 @@ from PIL import Image
 import io
 
 from auth import (
+    agent_key_ok,
     LOGIN_HTML, SESSION_COOKIE, CUSTOMER_SESSION_COOKIE, SESSION_MAX_AGE,
     is_public_path, is_valid_session, check_password, create_session,
     create_customer_session, validate_customer_session, invalidate_customer_session,
@@ -143,8 +144,11 @@ app = FastAPI(title="DTF Floor Monitor", lifespan=lifespan)
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        # Let public paths (agent APIs, login) through
+        # Let public paths (agent APIs, login) through — the new agent's endpoints
+        # additionally need the shared agent key (X-Agent-Key) once AGENT_API_KEY is set.
         if is_public_path(path):
+            if not agent_key_ok(path, request):
+                return JSONResponse({"status": "error", "message": "agent key required"}, status_code=401)
             return await call_next(request)
         # Customer API paths — check customer session
         if path.startswith("/api/customer/"):

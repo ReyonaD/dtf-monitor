@@ -53,3 +53,6 @@ agent/ui_preview/camera_stop.flag
 agent/ui_preview/camera_worker.log
 agent/ui_preview/camera_preview.tmp.jpg
 agent/ui_preview/camera_preview.jpg.want
+
+# keep the new agent build spec (the generic *.spec ignore is for stray PyInstaller output)
+!agent/build_agent.spec

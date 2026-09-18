@@ -100,6 +100,26 @@ PUBLIC_PREFIXES = (
 )
 
 
+# Agent API endpoints that are "public" (no dashboard session) but must carry the
+# shared agent key when AGENT_API_KEY is set on the server. Legacy endpoints the
+# old tkinter agents call (heartbeat, jobs, history…) stay open until every PC runs
+# the new agent; everything the new agent added is key-protected from day one.
+AGENT_KEY_PATHS = {
+    "/api/dropbox/list", "/api/dropbox/search", "/api/dropbox/temp-link", "/api/dropbox/move",
+    "/api/dropbox/claim", "/api/dropbox/release", "/api/sheet-status",
+    "/api/queue", "/api/queue/assign", "/api/queue/ripped", "/api/queue/scan",
+    "/api/queue/action", "/api/queue/clear",
+}
+AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")
+
+
+def agent_key_ok(path: str, request: Request) -> bool:
+    """True unless this path needs the agent key and the request lacks / mismatches it."""
+    if path not in AGENT_KEY_PATHS or not AGENT_API_KEY:
+        return True
+    return request.headers.get("X-Agent-Key", "") == AGENT_API_KEY
+
+
 def is_public_path(path: str) -> bool:
     if path in PUBLIC_PATHS:
         return True
