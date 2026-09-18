@@ -1106,17 +1106,34 @@ def queue_assign(machine: str, operator: str, path: str, name: str, meta: dict,
     return _q_dict(row)
 
 
+def _q_day_start_utc() -> str:
+    """Start of today in the shop's timezone (Texas), as a UTC ISO string comparable to
+    the queue's printed_at stamps — printed rows from earlier days leave the list."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("America/Chicago")
+        start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    except Exception:
+        start = (datetime.now(timezone.utc) - timedelta(hours=5)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    return start.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+_Q_OPEN = "cleared = 0 AND (printed_at IS NULL OR printed_at >= ?)"
+
+
 def queue_list(machine: str) -> list:
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM sheet_queue WHERE machine = ? AND cleared = 0 ORDER BY urgent DESC, assigned_at",
-                        (machine,)).fetchall()
+    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE machine = ? AND {_Q_OPEN} ORDER BY urgent DESC, assigned_at",
+                        (machine, _q_day_start_utc())).fetchall()
     conn.close()
     return [_q_dict(r) for r in rows]
 
 
 def queue_all() -> list:
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM sheet_queue WHERE cleared = 0 ORDER BY machine, urgent DESC, assigned_at").fetchall()
+    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE {_Q_OPEN} ORDER BY machine, urgent DESC, assigned_at",
+                        (_q_day_start_utc(),)).fetchall()
     conn.close()
     return [_q_dict(r) for r in rows]
 
