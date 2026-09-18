@@ -31,7 +31,13 @@ LOG = {"path": ""}
 
 def emit(obj):
     line = json.dumps(obj)
-    print(line, flush=True)
+    try:
+        # stdout is a pipe to the agent; in a windowed exe started by hand it may be
+        # closed/invalid (Errno 22) — never let logging crash the worker
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+    except Exception:
+        pass
     if LOG["path"]:
         try:
             with open(LOG["path"], "a", encoding="utf-8") as f:

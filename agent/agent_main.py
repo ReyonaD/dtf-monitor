@@ -14,9 +14,16 @@ import sys
 
 
 def _run_camera_worker(argv):
-    from dtf_agent import camera_worker
-    sys.argv = ["camera_worker"] + argv
-    camera_worker.main()
+    # Child process: no window, no error dialogs — whatever happens, exit quietly
+    # (the supervisor in the agent restarts it and shows the state in the UI).
+    try:
+        from dtf_agent import camera_worker
+        sys.argv = ["camera_worker"] + argv
+        camera_worker.main()
+    except SystemExit:
+        raise
+    except Exception:
+        os._exit(4)
 
 
 def main():
