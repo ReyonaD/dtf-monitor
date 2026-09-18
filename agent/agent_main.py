@@ -44,8 +44,8 @@ def main():
     title = f"DTF Monitor Agent {core.AGENT_VERSION}"
     win = webview.create_window(title, index, js_api=api, width=1180, height=780, min_size=(900, 600))
 
-    # ── Close (X) hides to the system tray instead of quitting: the agent must keep
-    # heartbeating / watching the camera all day. Quit only from the tray menu.
+    # ── Close (X) only minimizes (window stays on the taskbar) instead of quitting: the
+    # agent must keep heartbeating / watching the camera all day. Quit only from the tray menu.
     from dtf_agent import tray
     tray.install(win, title, on_quit=lambda: _shutdown(win))
 
@@ -62,7 +62,7 @@ def main():
     def on_closing():
         if tray.quitting():
             return True          # Quit from the tray menu: really close
-        tray.hide_to_tray(win)   # X: hide, keep running
+        tray.minimize(win)       # X: just minimize (stays on the taskbar), keep running
         return False
     win.events.closing += on_closing
 

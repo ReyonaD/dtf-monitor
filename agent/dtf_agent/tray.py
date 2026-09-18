@@ -1,6 +1,6 @@
 """
-System-tray icon for the agent: X hides the window here; the tray menu re-opens it
-or quits. Uses pystray (Win32 notification area) with a small generated icon.
+System-tray icon for the agent: X only minimizes the window (it stays on the taskbar);
+the tray menu re-opens it or quits. Uses pystray (Win32 notification area) with a small generated icon.
 """
 import threading
 
@@ -24,6 +24,14 @@ def show_window(*_):
     try:
         _win.show()
         _win.restore()
+    except Exception:
+        pass
+
+
+def minimize(win):
+    """X pressed: minimize to the taskbar (never hide), keep running."""
+    try:
+        win.minimize()
     except Exception:
         pass
 
