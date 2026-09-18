@@ -101,6 +101,34 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 
+## NEW agent (`agent/agent_main.py` + `agent/dtf_agent/`, built 2026-09-18 — NOT RELEASED)
+Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
+- `core.py` — config (reads/writes the OLD `config.json` keys too: machine_name/watched_folder/
+  riplog_path/machine_id — an in-place update keeps identity; `machineId` is minted once and
+  persisted), server client (`X-Agent-Key`), heartbeat every 8 s (RIPLOG file list → floor
+  dashboard, jobs/customer files/latest_version back), self-update (same batch swap as before),
+  history, `ripped_after(name, since)` = real RIPLOG check for the queue's RIP'd stage,
+  `find_riplog` incl. the SAi Production Suite path.
+- `riplog.py` — RIPLogParser/RIPLogWatcher moved verbatim from agent.py.
+- `camera.py` + `camera_worker.py` — oven camera; packaged worker = **same exe `--camera-worker`**.
+- `bridge.py` + `ui/index.html` — the preview UI (Print Files / Queue / History + customer files,
+  first-run opens Settings). Lock screen and Start/Complete buttons are GONE on purpose.
+- Build: `pip install -r requirements-agent.txt pyinstaller && python -m PyInstaller build_agent.spec`
+  (`pyinstaller` may not be on PATH in Git Bash). 70 MB onefile, UPX off, numpy collected
+  explicitly (else "OpenCV bindings requires numpy" at runtime). Verified 2026-09-18 on the
+  office PC: window, online, RIPLOG watched, Dropbox rail; worker mode clean without a camera.
+- Dev run: `DTF_AGENT_CONFIG=<path> pythonw agent_main.py` (env var overrides config location).
+- **Release checklist (do when the cameras arrive):** set `AGENT_API_KEY` on the server
+  (Railway var) and the same key in the exe (`DTF_AGENT_KEY` at build or `agentKey` in
+  config.json) → deploy server (legacy endpoints stay open for old agents) → bump
+  `AGENT_VERSION` in core.py → build → upload exe to the volume `/data/agent/` + version file
+  → old agents self-update on the next heartbeat → afterwards remove the RIPLOG
+  "auto-complete → OT Printed" path in server.py (the oven scan is the truth now).
+- Testing gotcha: a heartbeat with a NEW machine_id but an EXISTING machine_name makes the
+  server delete the old row + its print_jobs (`upsert_machine`). Names are case-sensitive
+  (`PICASSO_M_1` test ≠ real `Picasso_M_1`). Never test with a real machine's exact name and a
+  fresh id.
+
 ## Server-side sheet queue (`/api/queue/*`, built 2026-09-12)
 The per-machine work list lives in SQLite table `sheet_queue` (one row per machine+file), so
 every agent, the wall board **`/queue`** (`static/queue.html`, session-protected, auto-refresh
