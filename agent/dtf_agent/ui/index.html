@@ -757,13 +757,15 @@
       if(!liveOpen && (camTick++ % 4)) return;   // status chip: every ~1.2 s unless the live view is open
       const st=await api.camera_status();
       {const t=Date.now(); if(camPrev.t && st.frames>=camPrev.frames && t>camPrev.t){const f=(st.frames-camPrev.frames)/((t-camPrev.t)/1000); camFps=camFps?camFps*0.7+f*0.3:f;} camPrev={frames:st.frames,t}; if(st.status!=='live'){camFps=0;}}
-      const cls=st.status==='live'?'live':st.status==='error'?'bad':st.status==='starting'?'starting':'';
-      document.getElementById('camTxt').textContent=CAMLBL[st.status]||st.status;
+      const noCam=st.status==='error'&&/no camera found/.test(st.error||'');
+      const cls=st.status==='live'?'live':noCam?'':st.status==='error'?'bad':st.status==='starting'?'starting':'';
+      document.getElementById('camTxt').textContent=noCam?'not connected':(CAMLBL[st.status]||st.status);
       const d=document.getElementById('camDot');
       d.style.background= cls==='live'?'var(--ready)': cls==='bad'?'#ef4444': cls==='starting'?'var(--warn)':'var(--faint)';
       document.getElementById('camDot2').className='camdot '+cls;
       const line=document.getElementById('camLine');
       line.textContent= st.status==='live'?`live · camera ${st.index} · reads QR codes as sheets leave the oven`+(st.lastCode?` · last: ${st.lastCode}`:'')
+        : noCam?'not connected — plug in the webcam; it starts on its own'
         : st.status==='error'?`error — ${st.error}`
         : st.status==='starting'?'starting…'
         : (st.available?'off (⚙ Settings → Oven camera)':'off — opencv-python not installed');

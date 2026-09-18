@@ -98,7 +98,11 @@ def _reader(proc, gen):
                        frames=int(ev.get("frames") or 0), index=ev.get("index"))
     proc.wait()
     if CAM["gen"] == gen and CAM["proc"] is proc:
-        CAM.update(status="error", error=f"camera worker exited (code {proc.returncode}); restarting…")
+        if proc.returncode == 3:   # worker's "could not open the device" exit
+            CAM.update(status="error", error="no camera found — plug in the webcam (retrying)")
+        else:
+            CAM.update(status="error", error=f"camera worker exited (code {proc.returncode}); restarting…")
+        CAM["retry_at"] = time.time() + (20 if proc.returncode == 3 else 5)
 
 
 def _supervisor():
@@ -110,6 +114,8 @@ def _supervisor():
         dead = proc.poll() is not None
         # opening the device can take ~10-25 s on MSMF, so be patient before restarting
         quiet = CAM["last_line"] and time.time() - CAM["last_line"] > 45
+        if dead and time.time() < CAM.get("retry_at", 0):
+            continue  # no camera plugged in: retry every 20 s, not every 5
         if dead or quiet:
             start()
 
