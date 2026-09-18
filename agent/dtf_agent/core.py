@@ -57,6 +57,16 @@ LEGACY_MAP = {  # legacy config.json key → new key
 REQUIRED = {"server", "browseRoot", "machine"}  # a blank value falls back to the default
 
 
+def save_cfg(cfg):
+    out = {k: cfg.get(k) for k in DEFAULTS}
+    out.update({legacy: cfg.get(new) for legacy, new in LEGACY_MAP.items()})
+    for k in ("lock_enabled", "supervisor_pin"):
+        if k in cfg:
+            out[k] = cfg[k]
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2)
+
+
 def load_cfg():
     cfg = dict(DEFAULTS)
     saved = {}
@@ -75,23 +85,20 @@ def load_cfg():
         if k in REQUIRED and isinstance(v, str) and not v.strip():
             continue
         cfg[k] = v
-    if not cfg.get("machineId"):
-        cfg["machineId"] = str(uuid.uuid4())
     # Legacy-only settings the old build wrote; keep them so nothing is lost.
     for k in ("lock_enabled", "supervisor_pin"):
         if k in saved:
             cfg[k] = saved[k]
+    if not cfg.get("machineId"):
+        # First run on this PC: mint the id ONCE and persist it. The server keys
+        # machines by this id (a new id with the same name replaces the old row
+        # and its jobs), so it must never change between starts.
+        cfg["machineId"] = str(uuid.uuid4())
+        try:
+            save_cfg(cfg)
+        except Exception:
+            pass
     return cfg
-
-
-def save_cfg(cfg):
-    out = {k: cfg.get(k) for k in DEFAULTS}
-    out.update({legacy: cfg.get(new) for legacy, new in LEGACY_MAP.items()})
-    for k in ("lock_enabled", "supervisor_pin"):
-        if k in cfg:
-            out[k] = cfg[k]
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(out, f, indent=2)
 
 
 CFG = load_cfg()
