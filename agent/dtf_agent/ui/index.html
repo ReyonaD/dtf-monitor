@@ -220,7 +220,7 @@
   .qlist{flex:1;min-height:0;overflow:auto;padding:0 0 12px}
   .qsec{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;padding:12px 18px 8px;background:#0c0c10;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
   .qsec b{color:var(--muted);font-family:var(--mono);font-weight:600}
-  .qr{position:relative;display:grid;grid-template-columns:26px 150px minmax(120px,1fr) 104px minmax(220px,auto) 34px;align-items:center;gap:14px;min-height:56px;padding:0 18px;border-bottom:1px solid var(--border);transition:background .12s var(--ease-out)}
+  .qr{position:relative;display:grid;grid-template-columns:26px 150px minmax(120px,1fr) 104px minmax(220px,auto) auto 34px;align-items:center;gap:14px;min-height:56px;padding:0 18px;border-bottom:1px solid var(--border);transition:background .12s var(--ease-out)}
   @media(hover:hover){.qr:hover{background:rgba(255,255,255,.02)}}
   .qr.warn{box-shadow:inset 3px 0 0 var(--warn)}
   .qr.late{box-shadow:inset 3px 0 0 #ef4444}
@@ -241,6 +241,11 @@
   .qmsg{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .qr.warn .qmsg{color:var(--warn)}.qr.late .qmsg{color:#f87171;font-weight:600}
   .qmsg .cp{font-family:var(--mono);color:var(--text)}
+  .qdone{appearance:none;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--ui);font-size:12px;font-weight:700;height:30px;padding:0 12px;border-radius:8px;cursor:pointer;white-space:nowrap;justify-self:end;transition:background .14s var(--ease-out),border-color .14s var(--ease-out),color .14s var(--ease-out)}
+  @media(hover:hover){.qdone:hover{background:var(--ready-dim);border-color:rgba(52,211,153,.5);color:var(--ready)}}
+  .qdone:active{transform:scale(.96)}
+  .qdone:disabled{opacity:.5;cursor:default}
+  .qr.done .qdone-slot{visibility:hidden}
   .qmore{appearance:none;border:1px solid transparent;background:transparent;color:var(--faint);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;justify-self:end}
   @media(hover:hover){.qmore:hover{background:var(--surface2);color:var(--text);border-color:var(--border)}}
   .qpop{position:absolute;right:16px;top:calc(100% - 8px);z-index:5;min-width:250px;background:var(--panel);border:1px solid var(--border2);border-radius:10px;box-shadow:0 18px 40px -12px rgba(0,0,0,.8);padding:5px;display:flex;flex-direction:column;animation:pop .14s var(--ease-out)}
@@ -697,7 +702,7 @@
     else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp+otMark(it.ot_ripped);}
     else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'')+otMark(it.ot_printed);}
     const icon=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
-    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.urgent?'<span class="urg">URGENT</span>':''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><button class="qmore" title="More">⋯</button></div>`;
+    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.urgent?'<span class="urg">URGENT</span>':''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><span class="qdone-slot">${st==='done'?'':`<button class="qdone" title="Printed but the camera did not read it — mark this sheet printed">✓ Printed</button>`}</span><button class="qmore" title="More">⋯</button></div>`;
   }
   function renderQueue(){
     const list=document.getElementById('qlist'); if(!list)return;
@@ -712,6 +717,7 @@
     if(!html) html=`<div class="qempty"><b>Nothing on this machine yet.</b><br>Pick orders in <b>Print Files</b> and press Print — they show up here as <b>Downloaded</b>, turn <b>RIP'd</b> when Flexi logs them, and get a ✓ when the oven camera reads their QR.</div>`;
     list.innerHTML=html;
     list.querySelectorAll('.qmore').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();openMenu(b.closest('.qr'));}));
+    list.querySelectorAll('.qdone').forEach(b=>b.addEventListener('click',async e=>{e.stopPropagation();const row=b.closest('.qr');const it=QITEMS.find(i=>String(i.id)===row.dataset.id);if(!it)return;b.disabled=true;b.textContent='…';const r=await api.queue_action(it.id,'mark_printed');if(r&&r.status==='ok'){QITEMS=r.items;renderQueue();showFlash('ok',`${it.code}${it.total>1?`<small>sheet ${it.part} of ${it.total}</small>`:''}`,'Marked printed ✓');}else{b.disabled=false;b.textContent='✓ Printed';alert('Error: '+((r&&r.message)||'failed'));}}));
   }
   function closeMenus(){document.querySelectorAll('.qpop').forEach(p=>p.remove());}
   function openMenu(row){
