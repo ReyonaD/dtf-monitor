@@ -79,6 +79,14 @@ def load_cfg():
     for legacy, new in LEGACY_MAP.items():  # legacy first, new keys win below
         if saved.get(legacy) not in (None, "") and not saved.get(new):
             cfg[new] = saved[legacy]
+    # Old agents had a hand-typed server_url (default "http://"); the Dropbox/queue API
+    # only lives on the Railway host over https. Keep a Railway/production URL (forcing
+    # https), otherwise fall back to the default.
+    srv = str(cfg.get("server") or "").strip().rstrip("/")
+    if "dtfproductionstatus.com" in srv or "railway.app" in srv:
+        cfg["server"] = "https://" + srv.split("://", 1)[-1]
+    else:
+        cfg["server"] = DEFAULTS["server"]
     for k in DEFAULTS:
         v = saved.get(k)
         if v is None:

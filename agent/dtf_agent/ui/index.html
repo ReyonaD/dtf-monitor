@@ -582,7 +582,7 @@
       document.getElementById('mMachine').textContent=cfg.machine;document.getElementById('mOperator').textContent=cfg.operator;document.getElementById('hotpath').textContent=cfg.hotFolder;
       loadQueue();
       const root=await api.list_folder(cfg.browseRoot);
-      if(!root||root.status!=='ok'){document.getElementById('grid').innerHTML='<div style="padding:34px;color:#ef4444">Dropbox listing failed: '+((root&&root.message)||'')+'</div>';return;}
+      if(!root||root.status!=='ok'){document.getElementById('grid').innerHTML='<div style="padding:34px;color:#ef4444">Dropbox listing failed: '+((root&&root.message)||'')+'<div style="color:var(--faint);font-size:12px;margin-top:8px">Server: '+(cfg.server||'')+' · retrying every 10 s…</div></div>';setTimeout(boot,10000);return;}
       CATS=(root.entries||[]).filter(e=>e.type==='folder');
       const oneDtf=CATS.find(e=>/^1-DTF/i.test(e.name));
       navigate(oneDtf?oneDtf.path:cfg.browseRoot);
