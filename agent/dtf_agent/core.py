@@ -48,6 +48,7 @@ DEFAULTS = {
     "riplog": os.environ.get("DTF_RIPLOG", ""),
     "camera": os.environ.get("DTF_CAMERA", "0"),   # webcam index ("0" = first) or "off"
     "agentKey": os.environ.get("DTF_AGENT_KEY", ""),  # shared key for the agent API (X-Agent-Key)
+    "autostart": True,   # launch on Windows login (Startup-folder shortcut, no admin needed)
     "machineId": "",
 }
 LEGACY_MAP = {  # legacy config.json key → new key

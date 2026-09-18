@@ -32,6 +32,9 @@ def main():
     index = os.path.join(ui_dir, "index.html")
 
     api = Api()
+    from dtf_agent import autostart
+    if core.is_configured():
+        autostart.apply(bool(core.CFG.get("autostart", True)))  # keep the Startup shortcut in sync
     core.start_heartbeat()
     if core.is_configured():
         camera.start()

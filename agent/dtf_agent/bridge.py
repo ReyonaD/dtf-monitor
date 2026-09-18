@@ -11,18 +11,19 @@ import shutil
 import urllib.parse
 import webview
 
-from . import core, camera
+from . import core, camera, autostart
 from .core import CFG, PROGRESS
 
 
 class Api:
     # ── settings ──
     def config(self):
-        return {k: v for k, v in CFG.items() if k != "agentKey"} | {"agentVersion": core.AGENT_VERSION}
+        return {k: v for k, v in CFG.items() if k != "agentKey"} | {"agentVersion": core.AGENT_VERSION, "autostartInstalled": autostart.is_installed()}
 
     def save_config(self, patch):
         cam_changed = False
         rip_changed = False
+        auto_changed = False
         for k, v in (patch or {}).items():
             if k not in core.DEFAULTS or k in ("agentKey", "machineId"):
                 continue
@@ -34,6 +35,9 @@ class Api:
                 cam_changed = True
             if k == "riplog" and str(v) != str(CFG.get(k)):
                 rip_changed = True
+            if k == "autostart":
+                v = bool(v)
+                auto_changed = v != bool(CFG.get(k, True))
             CFG[k] = v
         try:
             core.save_cfg(CFG)
@@ -45,6 +49,8 @@ class Api:
                 core.HEARTBEAT.restart_riplog()
         if cam_changed:
             camera.start()
+        if auto_changed or (CFG.get("autostart") and not autostart.is_installed()):
+            autostart.apply(bool(CFG.get("autostart")))
         return {"status": "ok", "config": self.config()}
 
     def pick_folder(self):

@@ -383,6 +383,8 @@
         <label class="fld"><span>Hot folder <small>(where prints are dropped)</small></span><div class="fld-row"><input id="setHot" placeholder="C:\Users\…\DTF-HotFolder"><button class="browse" data-target="setHot" data-kind="folder">Browse…</button></div></label>
         <label class="fld"><span>Oven camera <small>(webcam number: 0 = first camera · off = disabled)</small></span><input id="setCamera" placeholder="0"></label>
         <label class="fld"><span>RIPLOG file <small>(Flexi RIP log — marks queue items RIP'd)</small></span><div class="fld-row"><input id="setRip" placeholder="blank = auto-detect"><button class="browse" id="ripDetect" type="button">Detect</button><button class="browse" data-target="setRip" data-kind="file">Browse…</button></div></label>
+        <div class="grp">Startup</div>
+        <label class="fld" style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" id="setAutostart" style="all:revert;width:16px;height:16px"><span>Start with Windows <small>(the agent opens on login; X only hides it to the tray)</small></span></label>
         <div class="grp">Connection</div>
         <label class="fld"><span>Server URL</span><input id="setServer" placeholder="https://dtfproductionstatus.com"></label>
         <label class="fld"><span>Dropbox root</span><input id="setRoot" placeholder="/PRODUCTION"></label>
@@ -649,7 +651,7 @@
   // ── settings modal ──
   const settingsEl=document.getElementById('settings');
   const setF={machine:'setMachine',operator:'setOperator',hotFolder:'setHot',riplog:'setRip',server:'setServer',browseRoot:'setRoot',camera:'setCamera'};
-  function openSettings(){ for(const k in setF){document.getElementById(setF[k]).value=cfg[k]||'';} document.getElementById('setMsg').textContent=''; settingsEl.hidden=false; }
+  function openSettings(){ for(const k in setF){document.getElementById(setF[k]).value=cfg[k]||'';} document.getElementById('setAutostart').checked=cfg.autostart!==false; document.getElementById('setMsg').textContent=''; settingsEl.hidden=false; }
   function closeSettings(){ settingsEl.hidden=true; }
   document.getElementById('gearBtn').addEventListener('click',openSettings);
   document.getElementById('setClose').addEventListener('click',closeSettings);
@@ -669,7 +671,7 @@
   });
   document.getElementById('setSave').addEventListener('click',async()=>{
     if(!api) return;
-    const patch={}; for(const k in setF){patch[k]=document.getElementById(setF[k]).value.trim();}
+    const patch={}; for(const k in setF){patch[k]=document.getElementById(setF[k]).value.trim();} patch.autostart=document.getElementById('setAutostart').checked;
     const res=await api.save_config(patch);
     if(res&&res.status==='ok'){
       cfg=res.config;

@@ -14,7 +14,7 @@ hidden = (
     + ["cv2"]
     + ["clr", "pythoncom", "pywintypes", "win32api", "win32con", "win32gui"]
     + ["dtf_agent", "dtf_agent.core", "dtf_agent.bridge", "dtf_agent.camera",
-       "dtf_agent.camera_worker", "dtf_agent.riplog", "dtf_agent.tray"]
+       "dtf_agent.camera_worker", "dtf_agent.riplog", "dtf_agent.tray", "dtf_agent.autostart"]
     + collect_submodules("pystray") + ["PIL.Image", "PIL.ImageDraw"]
 )
 datas = [(os.path.join("dtf_agent", "ui"), os.path.join("dtf_agent", "ui"))]
