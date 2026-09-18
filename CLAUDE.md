@@ -98,6 +98,9 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   the preview's `parseFile`; shown as a red URGENT badge in Print Files (sorted first), the Queue,
   and `/queue`; stored in `sheet_queue.urgent`; forwarded to OT (`urgent: true`), which sets the
   order's `urgent` flag (never un-sets it).
+- **Downloads are numbered** `N-- <file>` (operators' habit: `31---------++1PX - …`): next N = highest
+  numeric prefix in the hot folder + 1. Each `(2x)` copy gets its own number. RIPLOG matching
+  compares the numbered local name AND the bare name (`core.ripped_after`).
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 

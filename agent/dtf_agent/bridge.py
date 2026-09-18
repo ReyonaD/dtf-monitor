@@ -114,11 +114,12 @@ class Api:
                 if not link:
                     raise RuntimeError("no download link")
                 name, ext = os.path.splitext(base)
-                first = os.path.join(hot, base)
+                n = core.next_download_number(hot)          # "36-- <file>" — keeps the operators' numbering habit
+                first = os.path.join(hot, core.numbered(n, base))
                 core.download(link, first)
-                ok.append(base)
-                for c in range(2, copies + 1):
-                    dst = os.path.join(hot, f"{name} (copy {c}){ext}")
+                ok.append(os.path.basename(first))
+                for c in range(2, copies + 1):               # each physical copy gets its own number
+                    dst = os.path.join(hot, core.numbered(n + c - 1, f"{name} (copy {c}){ext}"))
                     shutil.copyfile(first, dst)
                     ok.append(os.path.basename(dst))
                 core.post_json("/api/queue/assign", {"path": p, "hot_path": first, "copies": copies, **core.who()})
@@ -146,7 +147,8 @@ class Api:
             for idx, it in enumerate(items):
                 if it.get("ripped_at") or it.get("printed_at"):
                     continue
-                if hb.ripped_after(it["name"], it.get("assigned_at") or ""):
+                local = os.path.basename(it.get("hot_path") or "") or it["name"]   # the numbered local file
+                if hb.ripped_after(local, it.get("assigned_at") or ""):
                     try:
                         r = core.post_json("/api/queue/ripped", {"id": it["id"]})
                         if r.get("item"):
@@ -180,7 +182,7 @@ class Api:
                 if not link:
                     raise RuntimeError("no download link")
                 os.makedirs(CFG["hotFolder"], exist_ok=True)
-                dest = os.path.join(CFG["hotFolder"], it["name"])
+                dest = os.path.join(CFG["hotFolder"], core.numbered(core.next_download_number(CFG["hotFolder"]), it["name"]))
                 core.download(link, dest)
                 core.post_json("/api/queue/assign", {"path": it["path"], "hot_path": dest,
                                                      "copies": it.get("copies", 1), **core.who()})

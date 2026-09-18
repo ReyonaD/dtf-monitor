@@ -224,6 +224,30 @@ def who():
     return {"machine": CFG["machine"], "operator": CFG["operator"]}
 
 
+# ── Download numbering ──────────────────────────────────────────────────────
+# Operators prefix every file they pull with a running number ("31---------++1PX - …")
+# so they can tell in Flexi which files they already sent to RIP. The agent keeps the
+# habit: next number = highest existing prefix in the hot folder + 1 (1 if none).
+import re as _re
+_NUM_PREFIX = _re.compile(r"^\s*(\d+)\s*-+")
+
+
+def next_download_number(folder: str) -> int:
+    best = 0
+    try:
+        for n in os.listdir(folder):
+            m = _NUM_PREFIX.match(n)
+            if m:
+                best = max(best, int(m.group(1)))
+    except Exception:
+        pass
+    return best + 1
+
+
+def numbered(n: int, base: str) -> str:
+    return f"{n}-- {base}"
+
+
 # ── RIPLOG auto-detect ───────────────────────────────────────────────────────
 def find_riplog():
     """Flexi's live RIPLOG.HTML. Newer SAi Production Suite installs keep it under
@@ -318,9 +342,10 @@ class Heartbeat(threading.Thread):
         except Exception:
             since = None
         target = (name or "").lower()
+        target_bare = _NUM_PREFIX.sub("", target).strip()  # also match without a "N-- " prefix
         for j in self.riplog_jobs:
             f = os.path.basename(j.get("file", "") or "").lower()
-            if f != target:
+            if f != target and _NUM_PREFIX.sub("", f).strip() != target_bare:
                 continue
             ts = (RIPLogParser._parse_timestamp(j.get("rip_end")) or RIPLogParser._parse_timestamp(j.get("rip_start"))
                   or RIPLogParser._parse_timestamp(j.get("output_start")))
