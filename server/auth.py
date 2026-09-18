@@ -77,6 +77,7 @@ PUBLIC_PATHS = {
     "/api/dropbox/release",               # agent Print-Files: unlock a file
     "/api/sheet-status",                  # agent queue: sheet RIP'd / Printed → Order Tracker
     "/api/queue",                         # agent queue: this machine's work list
+    "/api/queue/history",                 # agent History tab: printed sheets on this machine
     "/api/queue/assign",                  # agent queue: file downloaded on a machine
     "/api/queue/ripped",                  # agent queue: RIPLOG saw the file
     "/api/queue/scan",                    # agent queue: oven camera read a sheet's QR
@@ -107,7 +108,7 @@ PUBLIC_PREFIXES = (
 AGENT_KEY_PATHS = {
     "/api/dropbox/list", "/api/dropbox/search", "/api/dropbox/temp-link", "/api/dropbox/move",
     "/api/dropbox/claim", "/api/dropbox/release", "/api/sheet-status",
-    "/api/queue", "/api/queue/assign", "/api/queue/ripped", "/api/queue/scan",
+    "/api/queue", "/api/queue/history", "/api/queue/assign", "/api/queue/ripped", "/api/queue/scan",
     "/api/queue/action", "/api/queue/clear",
 }
 AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")

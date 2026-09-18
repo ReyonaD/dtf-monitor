@@ -301,7 +301,7 @@
   </div>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue <span class="cnt">0</span></button>
-    <button class="tab" role="tab" data-tab="history" aria-selected="false">History <span class="cnt">148</span></button>
+    <button class="tab" role="tab" data-tab="history" aria-selected="false">History <span class="cnt">0</span></button>
     <button class="tab" role="tab" data-tab="files" aria-selected="true">🖨 Print Files</button>
   </div>
   <div class="stage">
@@ -348,9 +348,9 @@
     </div>
     <div class="tabpanel" id="p-history" hidden>
       <div class="pane">
-        <div class="toolbar"><div class="crumb"><b>History</b> · this machine</div><div class="qsum"><span class="chip">Today <b>26 jobs</b></span></div></div>
+        <div class="toolbar"><div class="crumb"><b>History</b> · this machine · printed sheets</div><div class="qsum"><span class="chip">Today <b id="histToday">0</b></span><span class="chip">Total <b id="histTotal">0</b></span></div></div>
         <div id="cfiles" hidden style="border-bottom:1px solid var(--border)"></div>
-        <div class="tablewrap"><table class="h"><thead><tr><th>Time</th><th>Order</th><th>File</th><th>Operator</th><th style="text-align:right">Inches</th><th>Status</th></tr></thead><tbody id="hbody"></tbody></table></div>
+        <div class="tablewrap"><table class="h"><thead><tr><th>Printed</th><th>Order</th><th>File</th><th>Machine · operator</th><th style="text-align:right">Inches</th><th>Status</th></tr></thead><tbody id="hbody"></tbody></table></div>
       </div>
     </div>
   </div>
@@ -813,13 +813,17 @@
   if(window.pywebview&&window.pywebview.api){api=window.pywebview.api;boot();pollAgent();}
   else window.addEventListener('pywebviewready',()=>{api=window.pywebview.api;boot();pollAgent();});
 
-  // History tab = this machine's completed jobs from the server (legacy /api/history)
+  // History tab = sheets this machine printed (oven-confirmed queue rows), newest first
   async function renderHistory(){
     if(!api) return;
     try{
-      const st=await api.agent_state(); const rows=st.history||[];
-      const cnt=document.querySelector('.tab[data-tab="history"] .cnt'); if(cnt) cnt.textContent=rows.length;
-      document.getElementById('hbody').innerHTML=rows.map(j=>{const t=j.completed_at||j.started_at||''; const tm=t?new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''; const fn=j.filename||''; const code=(parseFile(fn).code)||'—'; const inch=j.print_inches?Number(j.print_inches).toFixed(0)+'"':''; return `<tr><td class="t">${tm}</td><td><span class="code">${code}</span></td><td class="mono" title="${fn.replace(/"/g,'&quot;')}" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${fn}</td><td><span class="op">${j.operator||''}</span></td><td class="num">${inch}</td><td><span class="status done"><span class="sd"></span>${j.status||'Done'}</span></td></tr>`;}).join('')||'<tr><td colspan="6" style="padding:30px;color:var(--faint)">No completed jobs yet today.</td></tr>';
+      const r=await api.queue_history(); const rows=(r&&r.items)||[];
+      const today=new Date(); today.setHours(0,0,0,0);
+      const nToday=rows.filter(x=>new Date(x.printed_at)>=today).length;
+      document.getElementById('histToday').textContent=nToday; document.getElementById('histTotal').textContent=rows.length;
+      const cnt=document.querySelector('.tab[data-tab="history"] .cnt'); if(cnt) cnt.textContent=nToday;
+      const when=iso=>{const d=new Date(iso); return d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});};
+      document.getElementById('hbody').innerHTML=rows.map(x=>`<tr><td class="t">${when(x.printed_at)}</td><td><span class="code">${x.code||'—'}${x.total>1?' <small style="color:var(--faint)">'+x.part+'/'+x.total+'</small>':''}</span></td><td class="mono" title="${(x.name||'').replace(/"/g,'&quot;')}" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${x.name||''}</td><td><span class="op">${x.printed_machine||x.machine||''}</span> · ${x.printed_operator||x.operator||''}</td><td class="num">${x.inch||''}${x.copies>1?' ×'+x.copies:''}</td><td><span class="status done"><span class="sd"></span>${x.manual?'Marked':'Printed'}</span></td></tr>`).join('')||'<tr><td colspan="6" style="padding:30px;color:var(--faint)">Nothing printed on this machine yet.</td></tr>';
     }catch(e){}
   }
   document.querySelector('.tab[data-tab="history"]').addEventListener('click',renderHistory);

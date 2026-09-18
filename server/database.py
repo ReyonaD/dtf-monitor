@@ -1138,6 +1138,15 @@ def queue_all() -> list:
     return [_q_dict(r) for r in rows]
 
 
+def queue_history(machine: str, limit: int = 200) -> list:
+    """Printed sheets on this machine, newest first (incl. cleared / earlier days)."""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM sheet_queue WHERE machine = ? AND printed_at IS NOT NULL ORDER BY printed_at DESC LIMIT ?",
+                        (machine, limit)).fetchall()
+    conn.close()
+    return [_q_dict(r) for r in rows]
+
+
 def queue_get(qid: int):
     conn = get_connection()
     row = conn.execute("SELECT * FROM sheet_queue WHERE id = ?", (qid,)).fetchone()

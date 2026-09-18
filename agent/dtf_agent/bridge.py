@@ -149,6 +149,12 @@ class Api:
                 "riplog": {"path": rip, "found": bool(rip and os.path.isfile(rip)),
                            "auto": not (CFG.get("riplog") or "").strip()}}
 
+    def queue_history(self):
+        try:
+            return core.get_json("/api/queue/history", {"machine": CFG["machine"], "limit": 300})
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     def queue_scan(self, code):
         try:
             return core.post_json("/api/queue/scan", {"code": (code or "").strip(), **core.who()})

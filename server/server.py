@@ -30,7 +30,7 @@ from database import get_unrecognized_files, set_store_override, KNOWN_STORE_COD
 from database import get_store_cell_details
 from database import record_dropbox_printed, get_dropbox_printed, delete_dropbox_printed
 from database import (queue_assign, queue_list, queue_all, queue_get, queue_update, queue_delete,
-                      queue_find_by_code, queue_clear)
+                      queue_find_by_code, queue_clear, queue_history)
 from sheet_names import parse_sheet_name, has_part
 from database import create_nest, unnest, start_nest_printing, complete_nest
 from database import get_job_by_id, get_jobs_by_nest, delete_machine
@@ -1203,6 +1203,12 @@ async def queue_assign_ep(req: Request):
 @app.get("/api/queue")
 async def queue_list_ep(machine: str = Query(...)):
     return {"status": "ok", "items": queue_list(machine)}
+
+
+@app.get("/api/queue/history")
+async def queue_history_ep(machine: str = Query(...), limit: int = Query(200)):
+    """Agent History tab: everything this machine printed (oven-confirmed), newest first."""
+    return {"status": "ok", "items": queue_history(machine, max(1, min(limit, 1000)))}
 
 
 @app.post("/api/queue/ripped")
