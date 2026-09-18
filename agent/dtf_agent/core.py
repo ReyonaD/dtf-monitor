@@ -82,11 +82,10 @@ def load_cfg():
     # Old agents had a hand-typed server_url (default "http://"); the Dropbox/queue API
     # only lives on the Railway host over https. Keep a Railway/production URL (forcing
     # https), otherwise fall back to the default.
-    srv = str(cfg.get("server") or "").strip().rstrip("/")
-    if "dtfproductionstatus.com" in srv or "railway.app" in srv:
-        cfg["server"] = "https://" + srv.split("://", 1)[-1]
-    else:
-        cfg["server"] = DEFAULTS["server"]
+    import re as _re
+    srv = str(cfg.get("server") or "").strip()
+    m = _re.search(r"([A-Za-z0-9.-]+\.(?:dtfproductionstatus\.com|railway\.app)|dtfproductionstatus\.com)", srv)
+    cfg["server"] = ("https://" + m.group(1)) if m else DEFAULTS["server"]
     for k in DEFAULTS:
         v = saved.get(k)
         if v is None:
