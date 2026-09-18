@@ -3,3 +3,5 @@ pywebview>=6.0
 pythonnet>=3.0        # pywebview's Windows (WebView2/WinForms) backend
 opencv-python<5       # oven camera QR reader (4.x — 5.0 could not open the C920 via MSMF)
 numpy
+pystray>=0.19          # tray icon: X hides the window, Quit from the tray menu
+pillow                 # tray icon image

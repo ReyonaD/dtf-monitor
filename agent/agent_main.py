@@ -41,6 +41,11 @@ def main():
     title = f"DTF Monitor Agent {core.AGENT_VERSION}"
     win = webview.create_window(title, index, js_api=api, width=1180, height=780, min_size=(900, 600))
 
+    # ── Close (X) hides to the system tray instead of quitting: the agent must keep
+    # heartbeating / watching the camera all day. Quit only from the tray menu.
+    from dtf_agent import tray
+    tray.install(win, title, on_quit=lambda: _shutdown(win))
+
     def on_loaded():
         # First run: open Settings with a "welcome" hint so the operator fills in
         # machine name / operator / hot folder; RIPLOG is auto-detected.
@@ -51,16 +56,31 @@ def main():
                 pass
     win.events.loaded += on_loaded
 
-    def on_closed():
-        try:
-            if core.HEARTBEAT:
-                core.HEARTBEAT.stop()
-        except Exception:
-            pass
-        camera.stop()
-    win.events.closed += on_closed
+    def on_closing():
+        if tray.quitting():
+            return True          # Quit from the tray menu: really close
+        tray.hide_to_tray(win)   # X: hide, keep running
+        return False
+    win.events.closing += on_closing
 
     webview.start()
+    _shutdown(None)
+
+
+def _shutdown(win):
+    from dtf_agent import core, camera, tray
+    try:
+        if core.HEARTBEAT:
+            core.HEARTBEAT.stop()
+    except Exception:
+        pass
+    camera.stop()
+    tray.remove()
+    if win is not None:
+        try:
+            win.destroy()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
