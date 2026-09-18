@@ -339,7 +339,7 @@
           <div class="crumb"><b>Queue</b> · this machine</div>
           <div class="qstats"><span class="qstat"><i class="sdot s-dl"></i> Downloaded <b id="qsDl">0</b></span><span class="qstat"><i class="sdot s-rip"></i> RIP'd <b id="qsRip">0</b></span><span class="qstat"><i class="sdot s-ok"></i> Printed today <b id="qsDone">0</b></span></div>
           <div class="spacer" style="flex:1"></div>
-          <span class="qstat" id="camChip" title="Oven camera"><i class="sdot" id="camDot" style="background:var(--faint)"></i> Camera <b id="camTxt">off</b></span><button class="browse" id="camLiveBtn" title="Show what the camera sees">👁 Live</button><div class="scanbox" title="Fallback: type the code if the camera missed a sheet">⌨<input id="scanInput" placeholder="Camera missed it? Type the code — e.g. PRO3956 (2-5)"><button class="browse" id="scanBtn">Scan</button></div>
+          <span class="qstat" id="camChip" title="Oven camera"><i class="sdot" id="camDot" style="background:var(--faint)"></i> Camera <b id="camTxt">off</b></span><button class="browse" id="camLiveBtn" title="Show what the camera sees">👁 Live</button><button class="browse" id="camReconnBtn" title="Reconnect the camera now">↻</button><div class="scanbox" title="Fallback: type the code if the camera missed a sheet">⌨<input id="scanInput" placeholder="Camera missed it? Type the code — e.g. PRO3956 (2-5)"><button class="browse" id="scanBtn">Scan</button></div>
         </div>
         <div class="qlist" id="qlist"></div>
         <div class="actionbar">
@@ -793,6 +793,7 @@
       }
     }catch(e){}
   }
+  document.getElementById('camReconnBtn').addEventListener('click',async()=>{if(!api)return;document.getElementById('camTxt').textContent='reconnecting…';try{await api.camera_restart();}catch(e){}});
   document.getElementById('camLiveBtn').addEventListener('click',()=>{const l=document.getElementById('camLive');l.hidden=!l.hidden;if(api)api.camera_live(!l.hidden);});
   let camFrameTimer=null;
   setInterval(async()=>{ if(!api||document.hidden) return; const live=document.getElementById('camLive'); if(live.hidden) return; try{const b64=await api.camera_frame(); if(b64) document.getElementById('camImg').src='data:image/jpeg;base64,'+b64;}catch(e){} }, 100); // ~10 fps while the panel is open

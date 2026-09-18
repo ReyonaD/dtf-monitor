@@ -98,11 +98,16 @@ def _reader(proc, gen):
                        frames=int(ev.get("frames") or 0), index=ev.get("index"))
     proc.wait()
     if CAM["gen"] == gen and CAM["proc"] is proc:
-        if proc.returncode == 3:   # worker's "could not open the device" exit
+        rc = proc.returncode
+        if rc == 3:      # could not open the device
             CAM.update(status="error", error="no camera found — plug in the webcam (retrying)")
+            CAM["retry_at"] = time.time() + 10
+        elif rc == 5:    # device lost mid-stream (USB unplugged)
+            CAM.update(status="error", error="camera disconnected — reconnecting…")
+            CAM["retry_at"] = time.time() + 4
         else:
-            CAM.update(status="error", error=f"camera worker exited (code {proc.returncode}); restarting…")
-        CAM["retry_at"] = time.time() + (20 if proc.returncode == 3 else 5)
+            CAM.update(status="error", error=f"camera worker exited (code {rc}); restarting…")
+            CAM["retry_at"] = time.time() + 5
 
 
 def _supervisor():
@@ -112,11 +117,17 @@ def _supervisor():
         if proc is None:
             continue
         dead = proc.poll() is not None
-        # opening the device can take ~10-25 s on MSMF, so be patient before restarting
-        quiet = CAM["last_line"] and time.time() - CAM["last_line"] > 45
+        # A worker whose read() is wedged (device yanked) stops reporting: 20 s of silence
+        # while live means gone; while still opening, allow ~45 s (MSMF open can be slow).
+        silent = time.time() - CAM["last_line"] if CAM["last_line"] else 0
+        quiet = silent > (20 if CAM["status"] == "live" else 45)
         if dead and time.time() < CAM.get("retry_at", 0):
-            continue  # no camera plugged in: retry every 20 s, not every 5
+            continue
         if dead or quiet:
+            if quiet and not dead:
+                CAM.update(status="error", error="camera stopped responding — reconnecting…")
+                _stop_proc(proc)
+                time.sleep(4)   # let MSMF release the device before a fresh open
             start()
 
 

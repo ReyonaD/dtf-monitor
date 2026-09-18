@@ -46,6 +46,22 @@ def emit(obj):
             pass
 
 
+def open_any(index):
+    """Open the configured index; if that fails, try 0..3 — a replugged USB camera can
+    come back under a different index. Returns (cap, index_used) or (None, index)."""
+    cap = open_cam(index)
+    if cap is not None:
+        return cap, index
+    for i in range(0, 4):
+        if i == index:
+            continue
+        cap = open_cam(i)
+        if cap is not None:
+            emit({"event": "info", "msg": f"camera {index} not found, using camera {i}"})
+            return cap, i
+    return None, index
+
+
 def open_cam(index):
     # Note: MSMF rejects CAP_PROP_*_TIMEOUT_MSEC (property 53), so no timeouts here;
     # the parent restarts this process if it stops reporting.
@@ -103,7 +119,7 @@ def main():
         pass
     emit({"event": "status", "status": "starting", "frames": 0, "error": "", "index": a.index})
     dbg("opening camera")
-    cap = open_cam(a.index)
+    cap, a.index = open_any(a.index)
     dbg(f"open done -> {cap is not None}")
     if cap is None:
         emit({"event": "status", "status": "error", "frames": 0, "index": a.index,
@@ -134,19 +150,16 @@ def main():
             dbg(f"read ret={ret} took {now-_t:.3f}s frames={frames} misses={misses}")
         if not ret:
             misses += 1
-            if misses > 150:  # ~5 s without frames → reopen
-                cap.release()
-                time.sleep(1)
-                cap = open_cam(a.index)
-                misses = 0
-                if cap is None:
-                    status = "error"
-                    emit({"event": "status", "status": status, "frames": frames, "index": a.index,
-                          "error": "camera stopped delivering frames; retrying"})
-                    time.sleep(3)
-                    cap = open_cam(a.index)
-                    if cap is None:
-                        continue
+            if misses > 100:  # ~3-5 s without frames: the device is gone (USB unplugged?)
+                # Exit instead of reopening in-process: MSMF only comes back cleanly in a
+                # fresh process. The agent restarts the worker in a few seconds.
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                emit({"event": "status", "status": "error", "frames": frames, "index": a.index,
+                      "error": "camera stopped delivering frames (unplugged?) — reconnecting"})
+                sys.exit(5)
             time.sleep(0.03)
         else:
             misses = 0
