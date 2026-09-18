@@ -5,3 +5,4 @@ opencv-python<5       # oven camera QR reader (4.x — 5.0 could not open the C9
 numpy
 pystray>=0.19          # tray icon: X hides the window, Quit from the tray menu
 pillow                 # tray icon image
+certifi                # bundled TLS roots (printer PCs may have a stale Windows root store)

@@ -130,19 +130,35 @@ def _headers(json_body=False):
     return h
 
 
+# TLS: verify against the bundled certifi CA set (Mozilla roots) instead of the PC's
+# Windows store — printer PCs with a stale/odd root store failed with
+# CERTIFICATE_VERIFY_FAILED (the old agent used `requests`, which bundles certifi).
+# Falls back to the OS store if certifi is missing.
+def _ssl_context():
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+_SSL = _ssl_context()
+
+
 def get_json(path, params=None, timeout=25):
     url = f"{server()}{path}"
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers=_headers())
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
         return json.loads(r.read().decode())
 
 
 def post_json(path, body, timeout=30):
     req = urllib.request.Request(f"{server()}{path}", data=json.dumps(body).encode(),
                                  headers=_headers(json_body=True), method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
         return json.loads(r.read().decode())
 
 
@@ -153,7 +169,7 @@ PROGRESS = {"active": False, "file": "", "done": 0, "total": 0, "index": 0, "cou
 
 def download(url, dest, timeout=180):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout) as resp, open(dest, "wb") as fout:
+    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as resp, open(dest, "wb") as fout:
         PROGRESS.update(done=0, total=int(resp.headers.get("Content-Length") or 0))
         while True:
             chunk = resp.read(256 * 1024)
@@ -189,7 +205,7 @@ def diagnose() -> dict:
     if not step("TCP connect :443", lambda: socket.create_connection((host, 443), timeout=8).close() or "connected"):
         return out
     def tls():
-        ctx = ssl.create_default_context()
+        ctx = _ssl_context()
         with socket.create_connection((host, 443), timeout=8) as s, ctx.wrap_socket(s, server_hostname=host) as ss:
             return ss.version()
     if not step("TLS handshake", tls):

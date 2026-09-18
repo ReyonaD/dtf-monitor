@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 hidden = (
     collect_submodules("webview")            # pywebview backends (edgechromium, winforms)
     + collect_submodules("numpy")            # OpenCV's bindings import numpy lazily — PyInstaller misses it
-    + ["cv2"]
+    + ["cv2", "certifi"]
     + ["clr", "pythoncom", "pywintypes", "win32api", "win32con", "win32gui"]
     + ["dtf_agent", "dtf_agent.core", "dtf_agent.bridge", "dtf_agent.camera",
        "dtf_agent.camera_worker", "dtf_agent.riplog", "dtf_agent.tray", "dtf_agent.autostart"]
@@ -20,6 +20,7 @@ hidden = (
 datas = [(os.path.join("dtf_agent", "ui"), os.path.join("dtf_agent", "ui"))]
 datas += collect_data_files("webview")       # WebView2 loader dll etc.
 datas += collect_data_files("numpy", include_py_files=False)
+datas += collect_data_files("certifi")     # cacert.pem — TLS roots independent of the PC's store
 
 a = Analysis(
     ["agent_main.py"],
