@@ -163,6 +163,47 @@ def download(url, dest, timeout=180):
             PROGRESS["done"] += len(chunk)
 
 
+def err_text(e) -> str:
+    """Human-readable exception text; bare TimeoutError() stringifies to '' so name it."""
+    t = str(e).strip()
+    return t if t else f"{type(e).__name__} (no response from {server()} — timed out?)"
+
+
+def diagnose() -> dict:
+    """Settings → Test connection: DNS, TCP 443, HTTPS GET, step by step, with the real error."""
+    import socket, ssl, time as _t
+    from urllib.parse import urlparse
+    host = urlparse(server()).hostname or ""
+    out = {"server": server(), "steps": []}
+    def step(name, fn):
+        t0 = _t.time()
+        try:
+            r = fn()
+            out["steps"].append({"name": name, "ok": True, "detail": str(r)[:200], "ms": int((_t.time() - t0) * 1000)})
+            return True
+        except Exception as e:
+            out["steps"].append({"name": name, "ok": False, "detail": f"{type(e).__name__}: {str(e)[:200]}", "ms": int((_t.time() - t0) * 1000)})
+            return False
+    if not step(f"DNS {host}", lambda: socket.gethostbyname(host)):
+        return out
+    if not step("TCP connect :443", lambda: socket.create_connection((host, 443), timeout=8).close() or "connected"):
+        return out
+    def tls():
+        ctx = ssl.create_default_context()
+        with socket.create_connection((host, 443), timeout=8) as s, ctx.wrap_socket(s, server_hostname=host) as ss:
+            return ss.version()
+    if not step("TLS handshake", tls):
+        return out
+    step("GET /api/agent/version", lambda: get_json("/api/agent/version", timeout=10))
+    step("GET /api/dropbox/list", lambda: (get_json("/api/dropbox/list", {"path": CFG["browseRoot"]}, timeout=25).get("status")))
+    try:
+        import urllib.request
+        out["proxy"] = urllib.request.getproxies() or {}
+    except Exception:
+        out["proxy"] = {}
+    return out
+
+
 def who():
     return {"machine": CFG["machine"], "operator": CFG["operator"]}
 
@@ -286,7 +327,7 @@ class Heartbeat(threading.Thread):
             self._maybe_update(self.state["latest_version"])
             return True
         except Exception as e:
-            self.state.update(connected=False, error=str(e)[:160])
+            self.state.update(connected=False, error=err_text(e)[:160])
             return False
 
     def fetch_history(self):

@@ -386,7 +386,8 @@
         <div class="grp">Startup</div>
         <label class="fld" style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" id="setAutostart" style="all:revert;width:16px;height:16px"><span>Start with Windows <small>(the agent opens on login; X only hides it to the tray)</small></span></label>
         <div class="grp">Connection</div>
-        <label class="fld"><span>Server URL</span><input id="setServer" placeholder="https://dtfproductionstatus.com"></label>
+        <label class="fld"><span>Server URL</span><div class="fld-row"><input id="setServer" placeholder="https://dtfproductionstatus.com"><button class="browse" id="testConn" type="button">Test connection</button></div></label>
+        <pre id="testOut" hidden style="margin:0;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:pre-wrap"></pre>
         <label class="fld"><span>Dropbox root</span><input id="setRoot" placeholder="/PRODUCTION"></label>
       </div>
       <div class="sheet-f"><span class="savemsg" id="setMsg"></span><button class="btn-ghost" id="setCancel">Cancel</button><button class="btn-primary" id="setSave">Save</button></div>
@@ -663,6 +664,14 @@
     const r = b.dataset.kind==='file' ? await api.pick_file() : await api.pick_folder();
     if(r&&r.status==='ok'&&r.path) document.getElementById(b.dataset.target).value=r.path;
   }));
+  document.getElementById('testConn').addEventListener('click',async()=>{
+    if(!api) return; const o=document.getElementById('testOut'); o.hidden=false; o.textContent='Testing '+document.getElementById('setServer').value.trim()+' …';
+    const r=await api.test_connection();
+    const lines=['Server: '+r.server];
+    for(const st of (r.steps||[])) lines.push((st.ok?'✓ ':'✗ ')+st.name+'  ('+st.ms+' ms)'+(st.ok?(st.detail?'  → '+st.detail:''):'\n    '+st.detail));
+    if(r.proxy&&Object.keys(r.proxy).length) lines.push('Proxy: '+JSON.stringify(r.proxy));
+    o.textContent=lines.join('\n');
+  });
   document.getElementById('ripDetect').addEventListener('click',async()=>{
     if(!api) return; const msg=document.getElementById('setMsg'); msg.style.color=''; msg.textContent='Looking for RIPLOG.HTML…';
     const r=await api.detect_riplog();
@@ -806,7 +815,7 @@
       const st=await api.agent_state();
       const d=document.getElementById('connDot'); d.style.background=st.connected?'var(--ready)':'#ef4444'; d.style.boxShadow=st.connected?'0 0 0 3px var(--ready-dim)':'0 0 0 3px rgba(239,68,68,.2)';
       document.getElementById('connChip').title=st.connected?'Connected to the DTF Monitor server':('Offline — '+(st.error||'cannot reach the server'));
-      document.getElementById('appSub').textContent='v'+st.version+(st.connected?' · online':' · OFFLINE')+(st.riplogActive?' · RIPLOG':'');
+      document.getElementById('appSub').textContent='v'+st.version+(st.connected?' · online':' · OFFLINE'+(st.error?' — '+st.error:''))+(st.riplogActive?' · RIPLOG':'');
       renderCustomerFiles(st.customerFiles||[]);
     }catch(e){}
   }

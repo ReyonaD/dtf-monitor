@@ -71,6 +71,9 @@ class Api:
             return {"status": "error", "message": str(e)}
         return {"status": "cancel"}
 
+    def test_connection(self):
+        return core.diagnose()
+
     def detect_riplog(self):
         core.reset_riplog_cache()
         p = core.find_riplog()
@@ -84,7 +87,7 @@ class Api:
                 params["fresh"] = 1
             return core.get_json("/api/dropbox/list", params)
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": core.err_text(e)}
 
     def search(self, q):
         try:
