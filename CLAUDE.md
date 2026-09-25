@@ -101,6 +101,11 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
 - **Downloads are numbered** `N-- <file>` (operators' habit: `31---------++1PX - …`): next N = highest
   numeric prefix in the hot folder + 1. Each `(2x)` copy gets its own number. RIPLOG matching
   compares the numbered local name AND the bare name (`core.ripped_after`).
+- **2026-09-25 agent/server changes:** (1) RIPLOG match ignores extension + number prefix (operators
+  convert PNG->TIF before RIP); (2) the Dropbox file moves to `BASILDI/` **at download time**
+  (`queue_assign` -> `_q_move(record=False)`); printed-by is recorded when the sheet is printed;
+  the Print Files badge reads "n/N taken"; (3) QR re-arm 10 s out of view; (4) `(Nx)` no longer
+  duplicates the file - one download, copies set in Flexi; the queue still expects N scans.
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 

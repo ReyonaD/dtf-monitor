@@ -1139,9 +1139,9 @@ def _q_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _move_to_basildi(src: str, machine: str, operator: str) -> str:
-    """Move a printed file into <its folder>/BASILDI (created if missing), release
-    the claim and remember who printed it. Returns the file's new path."""
+def _move_to_basildi(src: str, machine: str, operator: str, record: bool = True) -> str:
+    """Move a file into <its folder>/BASILDI (created if missing) and release the claim.
+    With record=True also remember who printed it. Returns the file's new path."""
     folder, base = src.rsplit("/", 1)
     dst = f"{folder}/{PRINTED_FOLDER}/{base}"
     try:
@@ -1151,7 +1151,8 @@ def _move_to_basildi(src: str, machine: str, operator: str) -> str:
         result = dbx.move(src, dst)
     dbx.release(src)
     moved = ((result or {}).get("metadata") or {}).get("path_display") or dst
-    record_dropbox_printed(moved, machine, operator)
+    if record:
+        record_dropbox_printed(moved, machine, operator)
     return moved
 
 
@@ -1163,10 +1164,18 @@ def _q_report_ot(item: dict, stage: str):
     queue_update(item["id"], **{"ot_" + stage: "ok" if r["ok"] else r["message"][:120]})
 
 
-def _q_move(item: dict):
+def _q_move(item: dict, record: bool = True):
+    """Move the Dropbox file to BASILDI (done at DOWNLOAD time since 2026-09-25 so the
+    store folder only shows what nobody has taken yet). Idempotent: an already-moved
+    item just gets its printed-by record updated."""
+    if item.get("moved_to"):
+        if record:
+            record_dropbox_printed(item["moved_to"], item.get("printed_machine") or item["machine"],
+                                   item.get("printed_operator") or item.get("operator", ""))
+        return
     try:
         moved = _move_to_basildi(item["path"], item.get("printed_machine") or item["machine"],
-                                 item.get("printed_operator") or item.get("operator", ""))
+                                 item.get("printed_operator") or item.get("operator", ""), record=record)
         queue_update(item["id"], moved_to=moved, move_error="")
     except Exception as e:
         dbx.release(item["path"])  # not moved, but drop the lock
@@ -1196,7 +1205,10 @@ async def queue_assign_ep(req: Request):
     item = queue_assign(machine, body.get("operator", ""), path, name, meta, body.get("hot_path", ""), copies, _q_now())
     dbx.claim(path, machine, body.get("operator", ""))
     import asyncio
-    await asyncio.to_thread(_q_report_ot, item, "downloaded")  # → OT chase list: "Downloaded on M1"
+    # Taken -> straight into BASILDI (the store folder = "nobody has taken this yet");
+    # who printed it is recorded later, when the oven camera / Printed button confirms.
+    await asyncio.to_thread(_q_move, item, False)
+    await asyncio.to_thread(_q_report_ot, queue_get(item["id"]), "downloaded")  # -> OT chase list
     return {"status": "ok", "item": queue_get(item["id"])}
 
 

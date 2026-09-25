@@ -7,7 +7,6 @@ queue), read this machine's queue, report RIP'd from the local RIPLOG, scan code
 (typed or from the camera), camera status/live view, settings, customer files.
 """
 import os
-import shutil
 import urllib.parse
 import webview
 
@@ -97,8 +96,8 @@ class Api:
 
     def print_files(self, items):
         """items: [{path, copies}]. Claim each file (so no other machine grabs it),
-        download it once, drop `copies` files into the hot folder (a (2x) order
-        prints twice) and register it in this machine's server-side queue."""
+        download it once into the hot folder and register it in this machine's
+        server-side queue (the server moves the Dropbox file to BASILDI right away)."""
         hot = CFG["hotFolder"]
         os.makedirs(hot, exist_ok=True)
         ok, failed = [], []
@@ -113,15 +112,12 @@ class Api:
                 link = core.post_json("/api/dropbox/temp-link", {"path": p}).get("link")
                 if not link:
                     raise RuntimeError("no download link")
-                name, ext = os.path.splitext(base)
                 n = core.next_download_number(hot)          # "36-- <file>" — keeps the operators' numbering habit
                 first = os.path.join(hot, core.numbered(n, base))
                 core.download(link, first)
                 ok.append(os.path.basename(first))
-                for c in range(2, copies + 1):               # each physical copy gets its own number
-                    dst = os.path.join(hot, core.numbered(n + c - 1, f"{name} (copy {c}){ext}"))
-                    shutil.copyfile(first, dst)
-                    ok.append(os.path.basename(dst))
+                # (Nx) copies: ONE file is downloaded; the operator sets copies in Flexi. The
+                # queue still knows `copies`, so the oven expects that many scans.
                 core.post_json("/api/queue/assign", {"path": p, "hot_path": first, "copies": copies, **core.who()})
             except Exception as e:
                 failed.append({"path": p, "error": str(e)})

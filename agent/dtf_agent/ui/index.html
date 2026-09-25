@@ -463,7 +463,7 @@
     PRINTEDMAP={}; const b=SUBS.find(f=>/^basildi$/i.test(f.name)); if(!b)return;
     try{const r=await api.list_folder(b.path);if(r&&r.status==='ok'){for(const f of (r.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name))){const pf=parseFile(f.name);const c=pf.code||f.name;(PRINTEDMAP[c]=PRINTEDMAP[c]||new Set()).add(pf.part);}}}catch(e){}
   }
-  const printedBadge=(o,cls)=>{const s=PRINTEDMAP[o.code];if(!s||!s.size)return '';return `<span class="${cls}" style="color:var(--ready)" title="${[...s].map(p=>'#'+p).join(', ')} in BASILDI">✓ ${s.size}/${o.sheets[0].total} printed</span>`;};
+  const printedBadge=(o,cls)=>{const s=PRINTEDMAP[o.code];if(!s||!s.size)return '';return `<span class="${cls}" style="color:var(--ready)" title="${[...s].map(p=>'#'+p).join(', ')} in BASILDI">⬇ ${s.size}/${o.sheets[0].total} taken</span>`;};
 
   function qcard(o){
     const total=o.sheets[0].total,multi=total>1;

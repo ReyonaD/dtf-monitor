@@ -341,11 +341,15 @@ class Heartbeat(threading.Thread):
                 since = since.astimezone().replace(tzinfo=None)  # RIPLOG stamps are local naive
         except Exception:
             since = None
-        target = (name or "").lower()
-        target_bare = _NUM_PREFIX.sub("", target).strip()  # also match without a "N-- " prefix
+        # Operators convert the downloaded PNG to TIF before RIPping (same name, other
+        # extension) and prefix a number - compare stems without extension/prefix.
+        def _stem(fn):
+            fn = _NUM_PREFIX.sub("", (fn or "").lower()).strip()
+            return os.path.splitext(fn)[0]
+        target_stem = _stem(name)
         for j in self.riplog_jobs:
-            f = os.path.basename(j.get("file", "") or "").lower()
-            if f != target and _NUM_PREFIX.sub("", f).strip() != target_bare:
+            f = os.path.basename(j.get("file", "") or "")
+            if _stem(f) != target_stem:
                 continue
             ts = (RIPLogParser._parse_timestamp(j.get("rip_end")) or RIPLogParser._parse_timestamp(j.get("rip_start"))
                   or RIPLogParser._parse_timestamp(j.get("output_start")))

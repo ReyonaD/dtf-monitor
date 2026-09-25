@@ -21,7 +21,7 @@ import subprocess
 
 from . import core
 
-SCAN_DEBOUNCE_S = 3  # a code must leave the camera's view this long before it counts again
+SCAN_DEBOUNCE_S = 10  # a code must leave the camera's view this long before it counts again
 
 _RUN_DIR = core.app_dir()
 CAM_PREVIEW = os.path.join(_RUN_DIR, "camera_preview.jpg")
