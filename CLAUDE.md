@@ -149,7 +149,8 @@ chase list shows "Downloaded on M1"), `ripped` (agent's RIPLOG watcher →
 server tells OT), `scan` (oven camera / preview box → server stamps who, moves the file to
 BASILDI, tells OT; a scan at machine X's oven can complete a sheet another machine downloaded
 — the oven is the truth), `action` (release/remove/mark_printed/move_printed), `clear`.
-`GET /api/queue?machine=` returns the list; `GET /api/queue/all` feeds the board. Timestamps are
+`GET /api/queue?machine=` returns the list; `GET /api/queue/all` feeds the board.
+- `/api/queue/all` also accepts `X-API-Key = OT_API_KEY` (OT embeds the board as its "Floor queue" view). Timestamps are
 UTC ISO **with offset** (the UI parses them, naive strings would be off by the TZ). File-name
 parsing is `server/sheet_names.py` (JS twin `parseFile` in the preview — keep in sync). The
 preview no longer keeps `queue.json`.

@@ -84,6 +84,7 @@ PUBLIC_PATHS = {
     "/api/queue/action",                  # agent queue: release / remove / mark printed / retry move
     "/api/queue/clear",                   # agent queue: hide printed rows
     "/api/queue/reset",                   # test/reset tool — protected by X-Api-Key (OT_API_KEY) inside the handler
+    "/api/queue/all",                     # wall board data — session OR X-API-Key (OT_API_KEY) checked in the handler
     "/login",
     "/favicon.ico",
     "/api/history",

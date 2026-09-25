@@ -1342,8 +1342,13 @@ async def queue_reset_ep(req: Request):
 
 
 @app.get("/api/queue/all")
-async def queue_all_ep():
-    """Wall board: every machine's open queue (session-protected, not for agents)."""
+async def queue_all_ep(request: Request):
+    """Wall board: every machine's open queue. Dashboard session, or Order Tracker
+    with the shared OT_API_KEY (X-API-Key) — OT embeds this board as 'Floor queue'."""
+    if not is_valid_session(request.cookies.get(SESSION_COOKIE)):
+        key = request.headers.get("X-API-Key", "") or request.headers.get("X-Api-Key", "")
+        if not os.environ.get("OT_API_KEY") or key != os.environ.get("OT_API_KEY"):
+            return JSONResponse({"error": "Not authenticated"}, status_code=401)
     by_machine: dict = {}
     for it in queue_all():
         by_machine.setdefault(it["machine"], []).append(it)
