@@ -99,7 +99,7 @@ def get_order_status(order_code: str) -> Optional[dict]:
 
 def update_sheet(order_code: str, part: int, total: int, copies: int, stage: str,
                  machine_name: str = "", operator: str = "", file_name: str = "",
-                 printed_count: Optional[int] = None, urgent: bool = False) -> dict:
+                 printed_count: Optional[int] = None, urgent: bool = False, reprint: bool = False) -> dict:
     """Per-sheet progress from the agent queue: stage = 'downloaded' | 'ripped' | 'printed'.
     Order Tracker keeps one row per sheet and rolls the order up itself
     ("Downloaded 1/5" → "RIP'd 1/5" → "Printed 3/5" → "Printed"). Returns {ok, message}."""
@@ -116,6 +116,8 @@ def update_sheet(order_code: str, part: int, total: int, copies: int, stage: str
         body["printedCount"] = printed_count
     if urgent:
         body["urgent"] = True  # "++" file name → OT flags the order urgent
+    if reprint:
+        body["reprint"] = True  # "REPRINT" file: logged as a reprint, never overwrites the first print
     try:
         resp = requests.post(
             f"{API_URL}/integrations/print",

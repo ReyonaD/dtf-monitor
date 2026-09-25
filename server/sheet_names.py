@@ -16,6 +16,7 @@ _COPIES = re.compile(r"\((\d+)\s*[xX]\)")
 _PART = re.compile(r"\((\d+)\s*-\s*(\d+)\)|(?<![\w/])(\d+)\s*/\s*(\d+)(?![\w/])")
 _INCH = re.compile(r"-(\d+)\s*INCH", re.I)
 _URGENT = re.compile(r"^\s*\+\+")  # "++" at the very start of the name = priority order
+_REPRINT = re.compile(r"reprint", re.I)  # "REPRINT" anywhere in the name = re-run of a printed sheet
 
 
 def has_part(s: str) -> bool:
@@ -37,7 +38,8 @@ def parse_sheet_name(name: str) -> dict:
     im = _INCH.search(name)
     inch = (im.group(1) + '"') if im else ""
     return {"code": code, "part": part, "total": total, "copies": copies, "inch": inch,
-            "cust": customer_of(name), "urgent": bool(_URGENT.match(name))}
+            "cust": customer_of(name), "urgent": bool(_URGENT.match(name)),
+            "reprint": bool(_REPRINT.search(name))}
 
 
 def customer_of(name: str) -> str:

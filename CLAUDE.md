@@ -106,6 +106,9 @@ into the real `agent.py` / bump AGENT_VERSION / push to the 10 PCs until the use
   (`queue_assign` -> `_q_move(record=False)`); printed-by is recorded when the sheet is printed;
   the Print Files badge reads "n/N taken"; (3) QR re-arm 10 s out of view; (4) `(Nx)` no longer
   duplicates the file - one download, copies set in Flexi; the queue still expects N scans.
+- **`REPRINT` anywhere in a file name = reprint.** `sheet_names.parse_sheet_name` → `reprint`, stored in
+  `sheet_queue.reprint`, blue REPRINT badge (Print Files, Queue, /queue), forwarded to OT as
+  `reprint: true` so the first print's machine/operator are kept and the reprint is logged separately.
 - Part rule for "(a-b)": the smaller number is the part (so "(2-5)" = part 2 of 5, "(3-1)" =
   part 1 of 3). Same in `_parse_name` (py) and `parseFile` (js) — keep them identical.
 
