@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.0"  # new agent line; the server still advertises 1.2.0 until rollout, so nothing auto-updates
+AGENT_VERSION = "1.3.1"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"
@@ -417,7 +417,7 @@ class Heartbeat(threading.Thread):
             exe_path = os.path.abspath(sys.executable)
             exe_dir = os.path.dirname(exe_path)
             new_path = os.path.join(exe_dir, "DTF-Monitor-Agent.new.exe")
-            download(f"{server()}/api/agent/download", new_path)
+            download(f"{server()}/api/agent/download?channel=new", new_path)
             if os.path.getsize(new_path) < 3_000_000:
                 os.remove(new_path); self._updating = False; return
             with open(new_path, "rb") as f:
@@ -429,7 +429,9 @@ class Heartbeat(threading.Thread):
                 f'set "EXE={exe_path}"\r\nset "NEW={new_path}"\r\n'
                 "set /a tries=0\r\n:waitloop\r\n"
                 'del "%EXE%" 2>nul\r\nif not exist "%EXE%" goto swap\r\n'
-                "set /a tries+=1\r\nif %tries% geq 60 goto fail\r\n"
+                "set /a tries+=1\r\nif %tries% geq 90 goto fail\r\n"
+                # after 20 s a leftover camera worker (same exe) is the only thing that can still hold the file
+                'if %tries% equ 20 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like \'*--camera-worker*\' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1\r\n'
                 "timeout /t 1 /nobreak >nul\r\ngoto waitloop\r\n"
                 ':swap\r\nmove /y "%NEW%" "%EXE%" >nul\r\nstart "" "%EXE%"\r\ngoto done\r\n'
                 ':fail\r\ndel "%NEW%" 2>nul\r\nstart "" "%EXE%"\r\n'
@@ -437,6 +439,11 @@ class Heartbeat(threading.Thread):
             )
             with open(bat_path, "w") as f:
                 f.write(bat)
+            for cb in list(BEFORE_UPDATE):     # clean camera stop etc. — os._exit skips atexit
+                try:
+                    cb()
+                except Exception:
+                    pass
             DETACHED = 0x00000008 | 0x00000200
             subprocess.Popen(["cmd", "/c", bat_path], creationflags=DETACHED, close_fds=True)
             os._exit(0)
@@ -459,6 +466,7 @@ def _version_newer(a, b):
 
 
 HEARTBEAT = None
+BEFORE_UPDATE = []   # callbacks run right before the self-update swaps the exe (agent_main registers camera.stop)
 
 
 def start_heartbeat():

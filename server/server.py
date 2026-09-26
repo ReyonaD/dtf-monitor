@@ -153,7 +153,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         # Admin tooling with the shared OT key: only DELETE /api/machines/{id} (cleanup of
         # retired/test machines); every other /api/machines call still needs a session.
-        if request.method == "DELETE" and path.startswith("/api/machines/"):
+        if (request.method == "DELETE" and path.startswith("/api/machines/")) or \
+           (request.method == "POST" and path == "/api/agent/upload"):
             key = request.headers.get("X-API-Key", "") or request.headers.get("X-Api-Key", "")
             if os.environ.get("OT_API_KEY") and key == os.environ.get("OT_API_KEY"):
                 return await call_next(request)
@@ -317,7 +318,7 @@ async def heartbeat(req: HeartbeatRequest):
     jobs = get_jobs_for_machine(req.machine_id)
     cfiles = get_customer_files_for_machine(req.machine_id)
     return {"status": "ok", "jobs": jobs, "customer_files": cfiles,
-            "latest_version": get_agent_version()}
+            "latest_version": get_agent_version(_agent_channel(req.agent_version))}
 
 
 @app.post("/api/jobs/{job_id}/start")
@@ -998,44 +999,77 @@ async def customer_ws(ws: WebSocket):
 _DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "dtf_monitor.db")
 AGENT_DIR = os.path.join(os.path.dirname(_DB_PATH), "agent")
 os.makedirs(AGENT_DIR, exist_ok=True)
-AGENT_EXE_PATH = os.path.join(AGENT_DIR, "DTF-Monitor-Agent.exe")
-AGENT_VERSION_FILE = os.path.join(AGENT_DIR, "version.txt")
+# Two release channels, so the new pywebview agent (1.3+) can be updated on the test
+# machines without touching the old tkinter agents (1.2.x) on the rest of the floor:
+#   legacy → /data/agent/DTF-Monitor-Agent.exe + version.txt
+#   new    → /data/agent/new/DTF-Monitor-Agent.exe + new/version.txt
+# The channel is picked from the version the agent reports (heartbeat) or its User-Agent
+# (download: "DTF-Monitor-Agent/1.3.x"; the old agent uses python-requests).
+AGENT_NEW_DIR = os.path.join(AGENT_DIR, "new")
+os.makedirs(AGENT_NEW_DIR, exist_ok=True)
+_AGENT_FILES = {
+    "legacy": (os.path.join(AGENT_DIR, "DTF-Monitor-Agent.exe"), os.path.join(AGENT_DIR, "version.txt")),
+    "new": (os.path.join(AGENT_NEW_DIR, "DTF-Monitor-Agent.exe"), os.path.join(AGENT_NEW_DIR, "version.txt")),
+}
+AGENT_EXE_PATH, AGENT_VERSION_FILE = _AGENT_FILES["legacy"]
 
 
-def get_agent_version():
+def _agent_channel(version: str) -> str:
+    m = re.match(r"\s*(\d+)\.(\d+)", str(version or ""))
+    if m and (int(m.group(1)), int(m.group(2))) >= (1, 3):
+        return "new"
+    return "legacy"
+
+
+def _agent_channel_from_request(request: Request) -> str:
+    ch = (request.query_params.get("channel") or "").strip().lower()
+    if ch in _AGENT_FILES:
+        return ch
+    m = re.search(r"DTF-Monitor-Agent/(\d+\.\d+)", request.headers.get("user-agent", ""))
+    return _agent_channel(m.group(1)) if m else "legacy"
+
+
+def get_agent_version(channel: str = "legacy"):
     try:
-        with open(AGENT_VERSION_FILE) as f:
+        with open(_AGENT_FILES.get(channel, _AGENT_FILES["legacy"])[1]) as f:
             return f.read().strip() or None
     except Exception:
         return None
 
 
 @app.get("/api/agent/version")
-async def agent_version():
-    return {"version": get_agent_version()}
+async def agent_version(request: Request):
+    ch = _agent_channel_from_request(request)
+    return {"version": get_agent_version(ch), "channel": ch}
 
 
 @app.get("/api/agent/download")
-async def agent_download():
-    if not os.path.isfile(AGENT_EXE_PATH):
-        return JSONResponse({"error": "no agent build uploaded"}, status_code=404)
-    return FileResponse(AGENT_EXE_PATH, filename="DTF-Monitor-Agent.exe",
-                        media_type="application/octet-stream")
+async def agent_download(request: Request):
+    ch = _agent_channel_from_request(request)
+    exe = _AGENT_FILES[ch][0]
+    if not os.path.isfile(exe):
+        return JSONResponse({"error": f"no agent build uploaded ({ch})"}, status_code=404)
+    return FileResponse(exe, filename="DTF-Monitor-Agent.exe", media_type="application/octet-stream")
 
 
 @app.post("/api/agent/upload")
-async def agent_upload(version: str = Form(...), file: UploadFile = File(...)):
-    """Admin-only (session-protected): publish a new agent build + version."""
+async def agent_upload(version: str = Form(...), file: UploadFile = File(...), channel: str = Form("legacy")):
+    """Admin-only (session or OT_API_KEY): publish a new agent build + version on a channel.
+    curl -H "X-Api-Key: $OT_API_KEY" -F channel=new -F version=1.3.1 -F file=@DTF-Monitor-Agent.exe .../api/agent/upload"""
+    ch = (channel or "legacy").strip().lower()
+    if ch not in _AGENT_FILES:
+        return JSONResponse({"error": "channel must be legacy|new"}, status_code=400)
+    exe, vfile = _AGENT_FILES[ch]
     data = await file.read()
     if len(data) < 3_000_000 or data[:2] != b"MZ":
         return JSONResponse({"error": "not a valid Windows .exe"}, status_code=400)
-    tmp = AGENT_EXE_PATH + ".tmp"
+    tmp = exe + ".tmp"
     with open(tmp, "wb") as f:
         f.write(data)
-    os.replace(tmp, AGENT_EXE_PATH)  # atomic swap so downloads never see a partial file
-    with open(AGENT_VERSION_FILE, "w") as f:
+    os.replace(tmp, exe)  # atomic swap so downloads never see a partial file
+    with open(vfile, "w") as f:
         f.write(version.strip())
-    return {"status": "ok", "version": version.strip(), "size": len(data)}
+    return {"status": "ok", "channel": ch, "version": version.strip(), "size": len(data)}
 
 
 # ── Dropbox (agent Print-Files) ──

@@ -47,6 +47,7 @@ def main():
         camera.start()
     import atexit
     atexit.register(camera.stop)
+    core.BEFORE_UPDATE.append(camera.stop)   # self-update: release the exe (worker = same exe) before the swap
 
     title = f"DTF Monitor Agent {core.AGENT_VERSION}"
     win = webview.create_window(title, index, js_api=api, width=1180, height=780, min_size=(900, 600))

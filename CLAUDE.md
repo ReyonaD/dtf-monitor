@@ -136,10 +136,24 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   explicitly (else "OpenCV bindings requires numpy" at runtime). Verified 2026-09-18 on the
   office PC: window, online, RIPLOG watched, Dropbox rail; worker mode clean without a camera.
 - Dev run: `DTF_AGENT_CONFIG=<path> pythonw agent_main.py` (env var overrides config location).
-- **Release checklist (do when the cameras arrive):** set `AGENT_API_KEY` on the server
+- **Two self-update channels (2026-09-26):** the server keeps `/data/agent/` (legacy, old
+  tkinter 1.2.x) and `/data/agent/new/` (new agent 1.3+) each with its own exe + `version.txt`.
+  Heartbeat advertises `latest_version` of the caller's channel (picked from the reported
+  `agent_version` ≥ 1.3 → new); `/api/agent/download` picks the channel from `?channel=new`
+  or the `DTF-Monitor-Agent/1.3.x` User-Agent (old agent = python-requests → legacy). So a
+  new build reaches ONLY the machines already on the new agent. **Publish a new-agent build:**
+  bump `AGENT_VERSION` in `agent/dtf_agent/core.py` → `python -m PyInstaller build_agent.spec`
+  → `curl -H "X-Api-Key: $OT_API_KEY" -F channel=new -F version=1.3.x -F file=@agent/dist/DTF-Monitor-Agent.exe https://dtfproductionstatus.com/api/agent/upload`
+  (OT_API_KEY = `railway variables --service dtf-monitor --json`). Agents pick it up on the
+  next heartbeat (≤ 8 s), download, swap via `_update.bat`, relaunch. The camera worker is the
+  same exe, so `core.BEFORE_UPDATE` (camera.stop) runs before the swap and the bat force-kills
+  a leftover `--camera-worker` process after 20 s. **1.3.0 builds lacked that** — a machine on
+  1.3.0 with a live camera worker cannot delete the exe (60 s fail → relaunch → retry loop):
+  install 1.3.1+ by hand there (Machine 1); machines without a camera update fine.
+- **Release checklist (full floor rollout, when the cameras arrive):** set `AGENT_API_KEY` on the server
   (Railway var) and the same key in the exe (`DTF_AGENT_KEY` at build or `agentKey` in
   config.json) → deploy server (legacy endpoints stay open for old agents) → bump
-  `AGENT_VERSION` in core.py → build → upload exe to the volume `/data/agent/` + version file
+  `AGENT_VERSION` in core.py → build → upload with `-F channel=legacy` (the old agents' channel)
   → old agents self-update on the next heartbeat → afterwards remove the RIPLOG
   "auto-complete → OT Printed" path in server.py (the oven scan is the truth now).
 - Testing gotcha: a heartbeat with a NEW machine_id but an EXISTING machine_name makes the
