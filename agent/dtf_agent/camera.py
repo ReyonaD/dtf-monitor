@@ -94,7 +94,7 @@ def _reader(proc, gen):
         if ev.get("event") == "code" and ev.get("code"):
             _scan(str(ev["code"]).strip())
         elif ev.get("event") == "status":
-            CAM.update(status=ev.get("status", "?"), error=ev.get("error", ""),
+            CAM.update(status=ev.get("status", "?"), error=ev.get("error", "") or ev.get("note", ""),
                        frames=int(ev.get("frames") or 0), index=ev.get("index"))
     proc.wait()
     if CAM["gen"] == gen and CAM["proc"] is proc:
@@ -120,7 +120,7 @@ def _supervisor():
         # A worker whose read() is wedged (device yanked) stops reporting: 20 s of silence
         # while live means gone; while still opening, allow ~45 s (MSMF open can be slow).
         silent = time.time() - CAM["last_line"] if CAM["last_line"] else 0
-        quiet = silent > (20 if CAM["status"] == "live" else 45)
+        quiet = silent > 30   # the worker reports every ≤2 s even while opening
         if dead and time.time() < CAM.get("retry_at", 0):
             continue
         if dead or quiet:

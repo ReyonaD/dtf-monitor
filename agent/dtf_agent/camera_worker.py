@@ -46,23 +46,50 @@ def emit(obj):
             pass
 
 
+OPEN_TIMEOUT_S = 90  # one open attempt may take this long (MSMF negotiation on some PCs > 45 s)
+
+
+def _open_with_timeout(index, backend, label):
+    """Run open_cam() in a helper thread and keep emitting 'starting' lines while it
+    works, so the agent's supervisor never mistakes a slow open for a hung worker."""
+    import threading
+    box = {}
+    def work():
+        try:
+            box["cap"] = open_cam(index, backend)
+        except Exception as e:
+            box["err"] = str(e)
+    th = threading.Thread(target=work, daemon=True)
+    t0 = time.time()
+    th.start()
+    while th.is_alive() and time.time() - t0 < OPEN_TIMEOUT_S:
+        th.join(2.0)
+        emit({"event": "status", "status": "starting", "frames": 0, "error": "", "index": index,
+              "note": f"opening camera {index} via {label} ({int(time.time() - t0)} s)"})
+    if th.is_alive():
+        emit({"event": "info", "msg": f"open camera {index} via {label}: no answer after {OPEN_TIMEOUT_S} s"})
+        return None
+    return box.get("cap")
+
+
 def open_any(index):
-    """Open the configured index; if that fails, try 0..3 — a replugged USB camera can
-    come back under a different index. Returns (cap, index_used) or (None, index)."""
-    cap = open_cam(index)
-    if cap is not None:
-        return cap, index
-    for i in range(0, 4):
-        if i == index:
-            continue
-        cap = open_cam(i)
-        if cap is not None:
-            emit({"event": "info", "msg": f"camera {index} not found, using camera {i}"})
-            return cap, i
+    """Open the configured index (MSMF, then DirectShow); if that fails, try 0..3 — a
+    replugged USB camera can come back under a different index."""
+    backends = [(cv2.CAP_MSMF, "MSMF"), (cv2.CAP_DSHOW, "DirectShow")]
+    order = [index] + [i for i in range(0, 4) if i != index]
+    for backend, label in backends:
+        for i in order:
+            cap = _open_with_timeout(i, backend, label)
+            if cap is not None:
+                if i != index or backend != cv2.CAP_MSMF:
+                    emit({"event": "info", "msg": f"camera opened: index {i} via {label}"})
+                return cap, i
     return None, index
 
 
-def open_cam(index):
+def open_cam(index, backend=None):
+    if backend is None:
+        backend = cv2.CAP_MSMF
     # Note: MSMF rejects CAP_PROP_*_TIMEOUT_MSEC (property 53), so no timeouts here;
     # the parent restarts this process if it stops reporting.
     # Resolution goes in the constructor: every cap.set() afterwards makes MSMF
@@ -71,9 +98,9 @@ def open_cam(index):
     try:
         # 720p @ 10 fps: decoding the camera stream is the main CPU cost, and a 2.5 cm QR at
         # 20-30 cm is still ~150 px wide at 720p - plenty for the detector.
-        cap = cv2.VideoCapture(index, cv2.CAP_MSMF, [cv2.CAP_PROP_FRAME_WIDTH, 1280, cv2.CAP_PROP_FRAME_HEIGHT, 720, cv2.CAP_PROP_FPS, 10])
+        cap = cv2.VideoCapture(index, backend, [cv2.CAP_PROP_FRAME_WIDTH, 1280, cv2.CAP_PROP_FRAME_HEIGHT, 720, cv2.CAP_PROP_FPS, 10])
     except Exception:
-        cap = cv2.VideoCapture(index, cv2.CAP_MSMF)
+        cap = cv2.VideoCapture(index, backend)
     if not cap.isOpened():
         cap.release()
         return None

@@ -790,7 +790,7 @@
       line.textContent= st.status==='live'?`live · camera ${st.index} · reads QR codes as sheets leave the oven`+(st.lastCode?` · last: ${st.lastCode}`:'')
         : noCam?'not connected — plug in the webcam; it starts on its own'
         : st.status==='error'?`error — ${st.error}`
-        : st.status==='starting'?'starting…'
+        : st.status==='starting'?('starting…'+(st.error?' · '+st.error:''))
         : (st.available?'off (⚙ Settings → Oven camera)':'off — opencv-python not installed');
       line.title=st.error||'';
       const live=document.getElementById('camLive');
