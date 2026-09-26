@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.1"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
+AGENT_VERSION = "1.3.2"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"
@@ -444,9 +444,14 @@ class Heartbeat(threading.Thread):
                     cb()
                 except Exception:
                     pass
-            DETACHED = 0x00000008 | 0x00000200
-            subprocess.Popen(["cmd", "/c", bat_path], creationflags=DETACHED, close_fds=True)
-            os._exit(0)
+            NO_WINDOW = 0x08000000 | 0x00000200   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP (timeout needs a console, just a hidden one)
+            subprocess.Popen(["cmd", "/c", bat_path], creationflags=NO_WINDOW, close_fds=True)
+            if REQUEST_EXIT is not None:
+                # close the window → webview.start() returns → main() shuts down → clean interpreter exit
+                threading.Timer(25, lambda: os._exit(0)).start()   # safety net if the window won't close
+                REQUEST_EXIT()
+            else:
+                os._exit(0)
         except Exception:
             self._updating = False
 
@@ -467,6 +472,7 @@ def _version_newer(a, b):
 
 HEARTBEAT = None
 BEFORE_UPDATE = []   # callbacks run right before the self-update swaps the exe (agent_main registers camera.stop)
+REQUEST_EXIT = None  # set by agent_main: closes the window so webview.start() returns and the process exits CLEANLY
 
 
 def start_heartbeat():

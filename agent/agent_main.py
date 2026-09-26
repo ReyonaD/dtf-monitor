@@ -57,6 +57,12 @@ def main():
     from dtf_agent import tray
     tray.install(win, title, on_quit=lambda: _shutdown(win))
 
+    def _exit_for_update():
+        # self-update: behave exactly like Quit from the tray (window closes, heartbeat/camera/tray
+        # stop, interpreter exits normally so PyInstaller can remove its temp dir without a dialog)
+        tray._quit()   # same path as 'Quit agent' in the tray menu
+    core.REQUEST_EXIT = _exit_for_update
+
     def on_loaded():
         # First run: open Settings with a "welcome" hint so the operator fills in
         # machine name / operator / hot folder; RIPLOG is auto-detected.
