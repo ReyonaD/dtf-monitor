@@ -221,6 +221,8 @@
   .qlist{flex:1;min-height:0;overflow:auto;padding:0 0 12px}
   .qsec{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;padding:12px 18px 8px;background:#0c0c10;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
   .qsec b{color:var(--muted);font-family:var(--mono);font-weight:600}
+  .qsec .qtot{margin-left:auto;color:var(--faint);letter-spacing:.4px}
+  .qsec .qtot b{color:var(--text);font-size:12px;margin-left:4px}
   .qr{position:relative;display:grid;grid-template-columns:26px 150px minmax(120px,1fr) 104px minmax(220px,auto) auto 34px;align-items:center;gap:14px;min-height:56px;padding:0 18px;border-bottom:1px solid var(--border);transition:background .12s var(--ease-out)}
   @media(hover:hover){.qr:hover{background:rgba(255,255,255,.02)}}
   .qr.warn{box-shadow:inset 3px 0 0 var(--warn)}
@@ -725,8 +727,10 @@
     document.getElementById('qsDl').textContent=dl; document.getElementById('qsRip').textContent=open.length-dl; document.getElementById('qsDone').textContent=done.length;
     const cnt=document.querySelector('.tab[data-tab="queue"] .cnt'); if(cnt)cnt.textContent=open.length;
     let html='';
-    if(open.length) html+=`<div class="qsec">In progress <b>${open.length}</b></div>`+open.map(qrow).join('');
-    if(done.length) html+=`<div class="qsec">Printed today <b>${done.length}</b></div>`+done.map(qrow).join('');
+    const inches=arr=>arr.reduce((a,i)=>a+(parseFloat(String(i.inch||'').replace(/[^0-9.]/g,''))||0)*(i.copies||1),0);
+    const totOpen=inches(open), totDone=inches(done);
+    if(open.length) html+=`<div class="qsec">In progress <b>${open.length}</b><span class="qtot">Total <b>${totOpen.toLocaleString()}"</b></span></div>`+open.map(qrow).join('');
+    if(done.length) html+=`<div class="qsec">Printed today <b>${done.length}</b><span class="qtot">Total <b>${totDone.toLocaleString()}"</b></span></div>`+done.map(qrow).join('');
     if(!html) html=`<div class="qempty"><b>Nothing on this machine yet.</b><br>Pick orders in <b>Print Files</b> and press Print — they show up here as <b>Downloaded</b>, turn <b>RIP'd</b> when Flexi logs them, and get a ✓ when the oven camera reads their QR.</div>`;
     list.innerHTML=html;
     list.querySelectorAll('.qmore').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();openMenu(b.closest('.qr'));}));
@@ -810,7 +814,8 @@
   document.getElementById('refBtn').addEventListener('click',()=>reload(true));
   // auto-refresh the current folder (uses the server's short cache, so many
   // agents polling still cost ~1 Dropbox call per folder); pauses when hidden.
-  setInterval(()=>{ if(api && !document.hidden && !document.getElementById('p-files').hidden) reload(false); }, 15000);
+  let pfTick=0;
+  setInterval(()=>{ if(api && !document.getElementById('p-files').hidden) reload((++pfTick % 3)===0); }, 10000);
   // ── agent state: server connection, version, customer files (legacy tab) ──
   async function pollAgent(){
     if(!api) return;

@@ -130,8 +130,15 @@ def temp_link(path: str) -> str:
 
 
 def move(from_path: str, to_path: str) -> dict:
-    """Move a (printed) file to another folder. autorename avoids name clashes."""
-    return _post("files/move_v2", {"from_path": from_path, "to_path": to_path, "autorename": True})
+    """Move a (printed) file to another folder. autorename avoids name clashes.
+    Drops the cached listings of the source and target folders so agents see the
+    change on their next poll instead of up to CACHE_TTL later."""
+    out = _post("files/move_v2", {"from_path": from_path, "to_path": to_path, "autorename": True})
+    with _lock:
+        for p in (from_path.rsplit("/", 1)[0], to_path.rsplit("/", 1)[0]):
+            for k in [k for k in _cache if k.lower() == p.lower()]:
+                _cache.pop(k, None)
+    return out
 
 
 def ensure_folder(path: str):
