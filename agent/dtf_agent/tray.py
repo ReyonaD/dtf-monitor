@@ -11,6 +11,15 @@ _quit_cb = None
 
 def _make_image():
     from PIL import Image, ImageDraw
+    import os, sys
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for cand in (os.path.join(base, "dtf_agent", "ui", "icon.png"),
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "icon.png")):
+        if os.path.isfile(cand):
+            try:
+                return Image.open(cand).convert("RGBA").resize((64, 64))
+            except Exception:
+                pass
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((4, 4, 60, 60), radius=14, fill=(124, 58, 237, 255))  # agent purple
