@@ -1352,7 +1352,19 @@ async def queue_all_ep(request: Request):
     by_machine: dict = {}
     for it in queue_all():
         by_machine.setdefault(it["machine"], []).append(it)
-    return {"status": "ok", "machines": by_machine, "now": _q_now()}
+    # Every machine that runs the NEW agent shows up, queue or not (old 1.2.x agents
+    # don't use the queue, so they are left out). Heartbeat gives online/offline.
+    meta: dict = {}
+    for m in get_all_machines():
+        v = str(m.get("agent_version") or "")
+        name = m.get("name") or ""
+        if not name:
+            continue
+        if v.startswith("1.3") or v.startswith("1.4") or name in by_machine:
+            by_machine.setdefault(name, [])
+            meta[name] = {"online": bool(m.get("is_online")), "last_seen": m.get("last_seen"),
+                          "operator": m.get("operator") or "", "version": v}
+    return {"status": "ok", "machines": by_machine, "meta": meta, "now": _q_now()}
 
 
 @app.get("/queue")

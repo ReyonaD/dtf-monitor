@@ -23,6 +23,7 @@
   header a:hover{color:var(--text)}
   main{padding:18px 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
   .machine{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .machine.offline{opacity:.6}
   .mh{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
   .mh .name{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--accent)}
   .mh .op{font-size:12px;color:var(--muted)}
@@ -77,13 +78,13 @@
   }
   function render(data){
     const board=document.getElementById('board'); let html=''; let dl=0,rip=0,ok=0,bad=0;
-    const names=Object.keys(data.machines||{}).sort();
+    const names=Object.keys(data.machines||{}).sort(); const meta=data.meta||{};
     for(const m of names){
       const items=data.machines[m]; const open=items.filter(i=>!i.printed_at), done=items.filter(i=>i.printed_at).sort((a,b)=>(b.printed_at||'').localeCompare(a.printed_at||''));
       const mdl=open.filter(i=>!i.ripped_at).length; dl+=mdl; rip+=open.length-mdl; ok+=done.length;
       for(const i of open){const st=stage(i);const mm=st==='dl'?mins(i.assigned_at):mins(i.ripped_at);if(mm>=(st==='dl'?STUCK.dl[0]:STUCK.rip[0]))bad++;}
-      const op=[...new Set(items.map(i=>i.operator).filter(Boolean))].join(', ');
-      html+=`<section class="machine"><div class="mh"><span class="name">${esc(m)}</span><span class="op">${esc(op)}</span><span class="cnt"><span><i class="dot d-dl"></i>${mdl}</span><span><i class="dot d-rip"></i>${open.length-mdl}</span><span><i class="dot d-ok"></i>${done.length}</span></span></div>`;
+      const mm=meta[m]||{}; const op=[...new Set(items.map(i=>i.operator).filter(Boolean))].join(', ')||mm.operator||''; const on=mm.online!==false; const seen=mm.last_seen?ago(mm.last_seen):'';
+      html+=`<section class="machine${on?'':' offline'}"><div class="mh"><i class="dot ${on?'d-ok':'d-bad'}" title="${on?'online':'offline'+(seen?' · last seen '+seen:'')}"></i><span class="name">${esc(m)}</span><span class="op">${esc(op)}${on?'':' · <b style="color:var(--red)">offline</b>'}</span><span class="cnt"><span><i class="dot d-dl"></i>${mdl}</span><span><i class="dot d-rip"></i>${open.length-mdl}</span><span><i class="dot d-ok"></i>${done.length}</span></span></div>`;
       if(open.length) html+=open.map(row).join('');
       else html+=`<div class="sec" style="color:var(--green)">Nothing in progress</div>`;
       if(done.length) html+=`<div class="sec">Printed today · ${done.length}</div>`+done.slice(0,6).map(row).join('');
