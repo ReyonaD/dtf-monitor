@@ -40,8 +40,15 @@ Operators browse/print DTF design files that live in a Dropbox **team folder** `
   to those under `/PRODUCTION` (compare lowercased — Dropbox is case-insensitive).
 - Endpoints (public in auth.py for the agent): `/api/dropbox/list` (20s cache; `?fresh=1`
   bypasses), `/api/dropbox/search`, `/api/dropbox/temp-link`, `/api/dropbox/move`,
-  `/api/dropbox/claim` + `/release` (claim = lock a file the instant Print is pressed so two
-  machines can't grab it; TTL 45min; cleared on move-to-PRINTED).
+  `/api/dropbox/claim` + `/release` (claim = lock a file the instant Download is pressed so two
+  machines can't grab it; TTL 45min; cleared on move-to-BASILDI). **First machine wins,
+  atomically (2026-09-26):** a second machine's claim on a file another machine locked within
+  the TTL gets **409 `{status:"taken", claimedBy:{machine, operator, secondsAgo}}`** — the
+  agent skips the file and asks the operator "Someone else just pressed Download … Download
+  here anyway? (it will be printed twice)"; Yes → re-sends with `force:true`. Files already
+  showing 🔒 in the list go with `force` after the existing confirm. Same machine re-claiming
+  (redownload) is always allowed. Print Files list refreshes every 5 s (fresh every 4th) so a
+  taken/moved file disappears from the other PCs within ~5 s.
 
 ## Print-Files agent UI (local test)
 `agent/ui_preview/` is a **pywebview** preview wired to the real server (LOCAL TEST ONLY —

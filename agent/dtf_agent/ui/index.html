@@ -597,7 +597,7 @@
     const picked=ORDERS.flatMap(o=>o.sheets.filter(s=>sel.has(s.path)).map(s=>({o,s})));
     const lockedSel=picked.filter(x=>x.s.claimedBy);
     if(lockedSel.length && !confirm('Already assigned to another machine:\n'+lockedSel.map(x=>x.o.code+' #'+x.s.p+'/'+x.s.total+' ('+(x.s.claimedBy.machine||'?')+')').join('\n')+'\n\nDownload here anyway?')) return;
-    const items=picked.map(x=>({path:x.s.path,copies:x.s.copies||1}));
+    const items=picked.map(x=>({path:x.s.path,copies:x.s.copies||1,force:!!x.s.claimedBy}));
     if(!items.length)return;
     printBtn.disabled=true; printBtn.innerHTML='⏳ Downloading…';
     // live progress bar (polls Python while the download runs)
@@ -606,6 +606,14 @@
     tgt.hidden=true; dl.hidden=false; fill.style.width='2%'; txt.innerHTML='Starting…';
     const poll=setInterval(async()=>{try{const p=await api.download_progress();if(!p.active)return;const pct=p.total?Math.round(p.done/p.total*100):0;const overall=p.count?((p.index-1)+(p.total?p.done/p.total:0))/p.count*100:0;fill.style.width=Math.max(2,overall)+'%';txt.innerHTML=`<b>${p.index} of ${p.count}</b> · ${(p.file||'').replace(/</g,'&lt;')} · ${p.total?fmtMB(p.done)+' / '+fmtMB(p.total)+' ('+pct+'%)':fmtMB(p.done)}`;}catch(e){}},250);
     let res; try{res=await api.print_files(items);}catch(e){res={ok:[],failed:[{error:e.message}]};}
+    const taken=(res.failed||[]).filter(f=>f.taken);
+    if(taken.length){
+      const q='Someone else just pressed Download for:\n\n'+taken.map(f=>'• '+(f.path||'').split('/').pop().slice(0,50)+'\n    '+f.error).join('\n')+'\n\nDownload here anyway? (it will be printed twice)';
+      if(confirm(q)){ const again=taken.map(f=>({path:f.path,copies:(items.find(i=>i.path===f.path)||{}).copies||1,force:true}));
+        let r2; try{r2=await api.print_files(again);}catch(e){r2={ok:[],failed:[{error:e.message}]};}
+        res={ok:[...(res.ok||[]),...(r2.ok||[])],failed:[...(res.failed||[]).filter(f=>!f.taken),...(r2.failed||[])]};
+      } else res={ok:res.ok||[],failed:(res.failed||[]).filter(f=>!f.taken)};
+    }
     clearInterval(poll); fill.style.width='100%'; txt.innerHTML=`<b>${res.ok?res.ok.length:0}</b> file(s) in hot folder ✓`;
     setTimeout(()=>{dl.hidden=true;tgt.hidden=false;},1800);
     if(res.failed&&res.failed.length) alert((res.ok?res.ok.length:0)+' file(s) downloaded.\n\nFailed: '+res.failed.length+'\n'+res.failed.map(f=>f.error||'').join('\n'));
@@ -815,7 +823,7 @@
   // auto-refresh the current folder (uses the server's short cache, so many
   // agents polling still cost ~1 Dropbox call per folder); pauses when hidden.
   let pfTick=0;
-  setInterval(()=>{ if(api && !document.getElementById('p-files').hidden) reload((++pfTick % 3)===0); }, 10000);
+  setInterval(()=>{ if(api && !document.getElementById('p-files').hidden) reload((++pfTick % 4)===0); }, 5000);
   // ── agent state: server connection, version, customer files (legacy tab) ──
   async function pollAgent(){
     if(!api) return;

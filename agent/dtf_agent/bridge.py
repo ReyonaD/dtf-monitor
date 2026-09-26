@@ -7,7 +7,9 @@ queue), read this machine's queue, report RIP'd from the local RIPLOG, scan code
 (typed or from the camera), camera status/live view, settings, customer files.
 """
 import os
+import json
 import urllib.parse
+import urllib.error
 import webview
 
 from . import core, camera, autostart
@@ -108,7 +110,20 @@ class Api:
             try:
                 base = os.path.basename(p)
                 PROGRESS.update(index=i + 1, file=base, done=0, total=0)
-                core.post_json("/api/dropbox/claim", {"path": p, **core.who()})
+                try:
+                    core.post_json("/api/dropbox/claim", {"path": p, "force": bool(it.get("force")), **core.who()})
+                except urllib.error.HTTPError as he:
+                    if he.code == 409:   # another machine took it first — don't download it twice
+                        try:
+                            by = json.loads(he.read().decode()).get("claimedBy") or {}
+                        except Exception:
+                            by = {}
+                        who = by.get("machine") or "another machine"
+                        if by.get("operator"):
+                            who += f" ({by['operator']})"
+                        failed.append({"path": p, "taken": True, "error": f"taken by {who} {by.get('secondsAgo', 0)} s ago"})
+                        continue
+                    raise
                 link = core.post_json("/api/dropbox/temp-link", {"path": p}).get("link")
                 if not link:
                     raise RuntimeError("no download link")

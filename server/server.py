@@ -1088,7 +1088,12 @@ async def dropbox_claim(req: Request):
     path = (body or {}).get("path")
     if not path:
         return JSONResponse({"status": "error", "message": "path required"}, status_code=400)
-    dbx.claim(path, (body or {}).get("machine", ""), (body or {}).get("operator", ""))
+    taken = dbx.claim(path, (body or {}).get("machine", ""), (body or {}).get("operator", ""),
+                      force=bool((body or {}).get("force")))
+    if taken:
+        # someone else pressed Download first — the agent asks the operator before forcing
+        return JSONResponse({"status": "taken", "claimedBy": {"machine": taken["machine"], "operator": taken["operator"],
+                             "secondsAgo": int(time.time() - taken["ts"])}}, status_code=409)
     return {"status": "ok"}
 
 

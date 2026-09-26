@@ -196,9 +196,15 @@ _claims_lock = threading.Lock()
 CLAIM_TTL = 45 * 60  # seconds
 
 
-def claim(path: str, machine: str, operator: str):
+def claim(path: str, machine: str, operator: str, force: bool = False):
+    """Lock a file for `machine`. First machine wins: if another machine holds a live
+    claim, return it (and do NOT take over) unless force=True. Returns None on success."""
     with _claims_lock:
+        cur = _claims.get(path)
+        if cur and cur.get("machine") != machine and time.time() - cur["ts"] <= CLAIM_TTL and not force:
+            return dict(cur)
         _claims[path] = {"machine": machine, "operator": operator, "ts": time.time()}
+        return None
 
 
 def release(path: str):
