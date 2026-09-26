@@ -150,6 +150,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not agent_key_ok(path, request):
                 return JSONResponse({"status": "error", "message": "agent key required"}, status_code=401)
             return await call_next(request)
+        # Admin tooling with the shared OT key: only DELETE /api/machines/{id} (cleanup of
+        # retired/test machines); every other /api/machines call still needs a session.
+        if request.method == "DELETE" and path.startswith("/api/machines/"):
+            key = request.headers.get("X-API-Key", "") or request.headers.get("X-Api-Key", "")
+            if os.environ.get("OT_API_KEY") and key == os.environ.get("OT_API_KEY"):
+                return await call_next(request)
         # Customer API paths — check customer session
         if path.startswith("/api/customer/"):
             token = request.cookies.get(CUSTOMER_SESSION_COOKIE)
@@ -557,7 +563,12 @@ async def list_store_codes():
 
 
 @app.delete("/api/machines/{machine_id}")
-async def delete_machine_endpoint(machine_id: str):
+async def delete_machine_endpoint(machine_id: str, request: Request):
+    # dashboard session, or the shared OT_API_KEY (admin tooling / cleanup of test machines)
+    if not is_valid_session(request.cookies.get(SESSION_COOKIE)):
+        key = request.headers.get("X-API-Key", "") or request.headers.get("X-Api-Key", "")
+        if not os.environ.get("OT_API_KEY") or key != os.environ.get("OT_API_KEY"):
+            return JSONResponse({"error": "Not authenticated"}, status_code=401)
     delete_machine(machine_id)
     state = build_dashboard_state()
     await manager.broadcast({"type": "state_update", "machines": state})
@@ -1360,7 +1371,14 @@ async def queue_all_ep(request: Request):
         name = m.get("name") or ""
         if not name:
             continue
-        if v.startswith("1.3") or v.startswith("1.4") or name in by_machine:
+        stale = False
+        if not m.get("is_online") and m.get("last_seen"):
+            try:
+                from datetime import datetime, timedelta
+                stale = datetime.fromisoformat(str(m["last_seen"]).replace("Z", "+00:00")).replace(tzinfo=None) < datetime.utcnow() - timedelta(hours=24)
+            except Exception:
+                stale = False
+        if (v.startswith("1.3") or v.startswith("1.4")) and not stale or name in by_machine:
             by_machine.setdefault(name, [])
             meta[name] = {"online": bool(m.get("is_online")), "last_seen": m.get("last_seen"),
                           "operator": m.get("operator") or "", "version": v}
