@@ -1040,10 +1040,34 @@ def get_agent_version(channel: str = "legacy"):
         return None
 
 
+def _agent_meta(channel: str) -> dict:
+    """size + sha256 of the published exe (written at upload; computed lazily for older uploads)."""
+    exe, vfile = _AGENT_FILES.get(channel, _AGENT_FILES["legacy"])
+    mfile = vfile + ".meta.json"
+    try:
+        if os.path.isfile(mfile) and os.path.getmtime(mfile) >= os.path.getmtime(exe):
+            return json.load(open(mfile))
+    except Exception:
+        pass
+    if not os.path.isfile(exe):
+        return {}
+    import hashlib
+    h = hashlib.sha256()
+    with open(exe, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    meta = {"size": os.path.getsize(exe), "sha256": h.hexdigest()}
+    try:
+        json.dump(meta, open(mfile, "w"))
+    except Exception:
+        pass
+    return meta
+
+
 @app.get("/api/agent/version")
 async def agent_version(request: Request):
     ch = _agent_channel_from_request(request)
-    return {"version": get_agent_version(ch), "channel": ch}
+    return {"version": get_agent_version(ch), "channel": ch, **_agent_meta(ch)}
 
 
 @app.get("/api/agent/download")
@@ -1072,7 +1096,12 @@ async def agent_upload(version: str = Form(...), file: UploadFile = File(...), c
     os.replace(tmp, exe)  # atomic swap so downloads never see a partial file
     with open(vfile, "w") as f:
         f.write(version.strip())
-    return {"status": "ok", "channel": ch, "version": version.strip(), "size": len(data)}
+    try:
+        os.remove(vfile + ".meta.json")
+    except Exception:
+        pass
+    meta = _agent_meta(ch)
+    return {"status": "ok", "channel": ch, "version": version.strip(), **meta}
 
 
 # ── Dropbox (agent Print-Files) ──

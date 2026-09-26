@@ -46,8 +46,8 @@ def main():
     if core.is_configured():
         camera.start()
     import atexit
-    atexit.register(camera.stop)
-    core.BEFORE_UPDATE.append(camera.stop)   # self-update: release the exe (worker = same exe) before the swap
+    atexit.register(lambda: camera.stop(halt=True))
+    core.BEFORE_UPDATE.append(lambda: camera.stop(halt=True))   # self-update: worker (same exe, shared temp dir) must be gone first
 
     title = f"DTF Monitor Agent {core.AGENT_VERSION}"
     win = webview.create_window(title, index, js_api=api, width=1180, height=780, min_size=(900, 600))
@@ -91,7 +91,7 @@ def _shutdown(win):
             core.HEARTBEAT.stop()
     except Exception:
         pass
-    camera.stop()
+    camera.stop(halt=True)
     tray.remove()
     if win is not None:
         try:

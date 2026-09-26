@@ -48,17 +48,28 @@ def _worker_cmd(idx):
 
 def _stop_proc(proc):
     """Ask the worker to release the camera and exit; force it only if it ignores us
-    (an abruptly killed worker leaves the device wedged for a while)."""
+    (an abruptly killed worker leaves the device wedged for a while). Returns only when
+    the worker process is gone (it shares our PyInstaller temp dir — see _supervisor)."""
     if proc is None or proc.poll() is not None:
         return
     try:
         open(CAM_STOPFILE, "w").close()
-        for _ in range(30):
+        for _ in range(60):
             if proc.poll() is not None:
                 break
             time.sleep(0.1)
         if proc.poll() is None:
             proc.terminate()
+            for _ in range(30):
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+        if proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(3)
+            except Exception:
+                pass
     except Exception:
         pass
     finally:
@@ -113,6 +124,8 @@ def _reader(proc, gen):
 def _supervisor():
     while True:
         time.sleep(5)
+        if CAM.get("halt"):
+            return
         proc = CAM["proc"]
         if proc is None:
             continue
@@ -128,12 +141,15 @@ def _supervisor():
                 CAM.update(status="error", error="camera stopped responding — reconnecting…")
                 _stop_proc(proc)
                 time.sleep(4)   # let MSMF release the device before a fresh open
-            start()
+            if not CAM.get("halt"):
+                start()
 
 
 def start():
     """(Re)start the camera worker from CFG["camera"] ("0", "1", … or "off")."""
     global _sup_started
+    if CAM.get("halt"):
+        return           # shutting down / updating: never spawn another worker
     old = CAM["proc"]
     CAM["gen"] += 1
     CAM["proc"] = None
@@ -162,7 +178,10 @@ def start():
         threading.Thread(target=_supervisor, daemon=True).start()
 
 
-def stop():
+def stop(halt=False):
+    """Stop the worker. halt=True (shutdown / self-update) also forbids any respawn."""
+    if halt:
+        CAM["halt"] = True
     CAM["gen"] += 1
     proc, CAM["proc"] = CAM["proc"], None
     _stop_proc(proc)

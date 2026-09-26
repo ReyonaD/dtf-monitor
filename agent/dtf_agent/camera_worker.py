@@ -47,6 +47,11 @@ def emit(obj):
 
 
 OPEN_TIMEOUT_S = 90  # one open attempt may take this long (MSMF negotiation on some PCs > 45 s)
+STOPFILE = ""        # set in main(); checked while opening too, so a stop request never waits for MSMF
+
+
+def _stop_requested():
+    return bool(STOPFILE) and os.path.exists(STOPFILE)
 
 
 def _open_with_timeout(index, backend, label):
@@ -64,6 +69,9 @@ def _open_with_timeout(index, backend, label):
     th.start()
     while th.is_alive() and time.time() - t0 < OPEN_TIMEOUT_S:
         th.join(2.0)
+        if _stop_requested():
+            emit({"event": "info", "msg": "stop requested while opening — exiting"})
+            os._exit(0)   # the open thread is stuck inside MSMF; don't wait for it
         emit({"event": "status", "status": "starting", "frames": 0, "error": "", "index": index,
               "note": f"opening camera {index} via {label} ({int(time.time() - t0)} s)"})
     if th.is_alive():
@@ -79,6 +87,8 @@ def open_any(index):
     order = [index] + [i for i in range(0, 4) if i != index]
     for backend, label in backends:
         for i in order:
+            if _stop_requested():
+                os._exit(0)
             cap = _open_with_timeout(i, backend, label)
             if cap is not None:
                 if i != index or backend != cv2.CAP_MSMF:
@@ -127,6 +137,8 @@ def main():
     ap.add_argument("--debug", action="store_true")     # per-read timing on stderr
     ap.add_argument("--log", default="")                # also append events to this file
     a = ap.parse_args()
+    global STOPFILE
+    STOPFILE = a.stopfile
     t_start = time.time()
     LOG["path"] = a.log
     if a.log:

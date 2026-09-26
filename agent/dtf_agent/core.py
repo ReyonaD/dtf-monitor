@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.2"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
+AGENT_VERSION = "1.3.3"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"
@@ -417,12 +417,20 @@ class Heartbeat(threading.Thread):
             exe_path = os.path.abspath(sys.executable)
             exe_dir = os.path.dirname(exe_path)
             new_path = os.path.join(exe_dir, "DTF-Monitor-Agent.new.exe")
+            try:
+                meta = get_json("/api/agent/version?channel=new", timeout=15) or {}
+            except Exception:
+                meta = {}
             download(f"{server()}/api/agent/download?channel=new", new_path)
-            if os.path.getsize(new_path) < 3_000_000:
-                os.remove(new_path); self._updating = False; return
-            with open(new_path, "rb") as f:
-                if f.read(2) != b"MZ":
-                    os.remove(new_path); self._updating = False; return
+            if not _build_ok(new_path, meta):
+                # truncated / corrupt download (e.g. the server restarted mid-transfer):
+                # never swap it in; try again on a later heartbeat
+                try:
+                    os.remove(new_path)
+                except Exception:
+                    pass
+                threading.Timer(120, lambda: setattr(self, "_updating", False)).start()
+                return
             bat_path = os.path.join(exe_dir, "_update.bat")
             bat = (
                 "@echo off\r\nsetlocal\r\n"
@@ -454,6 +462,31 @@ class Heartbeat(threading.Thread):
                 os._exit(0)
         except Exception:
             self._updating = False
+
+
+def _build_ok(path, meta):
+    """A downloaded build is only trusted when it is a Windows exe of the size (and sha256,
+    when the server publishes one) the server announced."""
+    try:
+        size = os.path.getsize(path)
+        if size < 3_000_000:
+            return False
+        with open(path, "rb") as f:
+            if f.read(2) != b"MZ":
+                return False
+        if meta.get("size") and int(meta["size"]) != size:
+            return False
+        if meta.get("sha256"):
+            import hashlib
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            if h.hexdigest().lower() != str(meta["sha256"]).lower():
+                return False
+        return True
+    except Exception:
+        return False
 
 
 def _version_newer(a, b):

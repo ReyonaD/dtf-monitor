@@ -147,9 +147,19 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   (OT_API_KEY = `railway variables --service dtf-monitor --json`). Agents pick it up on the
   next heartbeat (≤ 8 s), download, swap via `_update.bat`, relaunch. The camera worker is the
   same exe, so `core.BEFORE_UPDATE` (camera.stop) runs before the swap and the bat force-kills
-  a leftover `--camera-worker` process after 20 s. **1.3.0 builds lacked that** — a machine on
-  1.3.0 with a live camera worker cannot delete the exe (60 s fail → relaunch → retry loop):
-  install 1.3.1+ by hand there (Machine 1); machines without a camera update fine.
+  a leftover `--camera-worker` process after 20 s.
+  **PyInstaller 6.10 gotcha (root cause of the update dialogs seen 2026-09-26):** in onefile
+  mode a child process of the same exe (our camera worker) REUSES the parent's `_MEIxxxx`
+  temp dir. If a worker is alive/starting when the main process exits, the bootloader shows
+  "Failed to remove temporary directory" (modal → exe stays locked, update waits for OK) or
+  the worker dies with "Failed to load Python DLL … _MEI…\python313.dll". Since 1.3.3:
+  `camera.stop(halt=True)` (no respawn, waits until the worker is gone, worker honours the
+  stopfile even mid-open) runs before any exit; 1.3.2 made the exit clean (window/tray closed,
+  interpreter exits normally, updater bat in a hidden console) instead of `os._exit`.
+  Downloads are verified against `size`+`sha256` from `/api/agent/version` (1.3.3+), so a
+  server restart mid-transfer just means "retry later" — still, **don't `railway up` while
+  machines are updating** if you can help it. Old builds (≤1.3.2) may show one of the dialogs
+  once more on their next update; clicking OK completes it.
 - **Release checklist (full floor rollout, when the cameras arrive):** set `AGENT_API_KEY` on the server
   (Railway var) and the same key in the exe (`DTF_AGENT_KEY` at build or `agentKey` in
   config.json) → deploy server (legacy endpoints stay open for old agents) → bump
