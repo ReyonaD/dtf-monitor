@@ -317,8 +317,11 @@ async def heartbeat(req: HeartbeatRequest):
     # Return current jobs for this machine (so agent can show them)
     jobs = get_jobs_for_machine(req.machine_id)
     cfiles = get_customer_files_for_machine(req.machine_id)
-    return {"status": "ok", "jobs": jobs, "customer_files": cfiles,
-            "latest_version": get_agent_version(_agent_channel(req.agent_version))}
+    # AGENT_UPDATE_HOLD="Picasso_M_1,..." keeps named machines on their current build
+    # (e.g. a PC whose 1.3.0 agent has a live camera worker and must be updated by hand).
+    hold = {m.strip() for m in os.environ.get("AGENT_UPDATE_HOLD", "").split(",") if m.strip()}
+    latest = None if req.machine_name in hold else get_agent_version(_agent_channel(req.agent_version))
+    return {"status": "ok", "jobs": jobs, "customer_files": cfiles, "latest_version": latest}
 
 
 @app.post("/api/jobs/{job_id}/start")
