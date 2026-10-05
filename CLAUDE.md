@@ -171,6 +171,17 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   (`PICASSO_M_1` test ≠ real `Picasso_M_1`). Never test with a real machine's exact name and a
   fresh id.
 
+## Phone view of Print Files — `/files` (2026-10-04)
+`server/static/files.html`, session-protected like `/queue` (log in once on the phone; the
+cookie lasts 30 days). Overview = every category → store folder with files / orders / inches /
+urgent / 🔒 counts (`GET /api/dropbox/overview`, listings fetched in parallel in a thread,
+shares the agents' 20 s cache; `?fresh=1` from the ↻ button); tap a store → its orders grouped
+like the agent's Print Files tab (`/api/dropbox/folder?path=`), 🔒 = claimed by a machine,
+✓ = already in BASILDI; search box = `/api/dropbox/find?q=` across PRODUCTION with the folder
+shown per order. Read-only (no downloads). Counts are files directly in the store folder —
+BASILDI/subfolders are not counted. Auto-refresh 60 s. Grouping lives in `_group_orders()`
+(server.py) using `sheet_names.parse_sheet_name` — the same rules as the agent UI.
+
 ## Server-side sheet queue (`/api/queue/*`, built 2026-09-12)
 The per-machine work list lives in SQLite table `sheet_queue` (one row per machine+file), so
 every agent, the wall board **`/queue`** (`static/queue.html`, session-protected, auto-refresh

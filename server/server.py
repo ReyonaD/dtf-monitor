@@ -1136,6 +1136,120 @@ async def dropbox_list(path: Optional[str] = Query(None), fresh: Optional[int] =
         return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
 
 
+_PRINTABLE = re.compile(r"\.(png|tif|tiff|jpg|jpeg)$", re.I)
+
+
+def _group_orders(entries):
+    """Group a folder's printable files into orders (same rules as the agent's Print
+    Files tab): code from the file name, parts sorted, inches, copies, lock/printed."""
+    from sheet_names import parse_sheet_name
+    orders: dict = {}
+    for e in entries:
+        if e.get("type") != "file" or not _PRINTABLE.search(e.get("name") or ""):
+            continue
+        pf = parse_sheet_name(e["name"])
+        code = pf["code"] or e["name"]
+        o = orders.setdefault(code, {"code": code, "cust": "", "sheets": [], "modified": None})
+        o["sheets"].append({"part": pf["part"], "total": pf["total"], "inch": pf["inch"], "copies": pf["copies"],
+                            "urgent": pf["urgent"], "reprint": pf["reprint"], "name": e["name"], "path": e.get("path"),
+                            "claimedBy": e.get("claimedBy"), "printedBy": e.get("printedBy"), "modified": e.get("modified")})
+        if pf["cust"] and not o["cust"]:
+            o["cust"] = pf["cust"]
+        if e.get("modified") and (o["modified"] is None or e["modified"] > o["modified"]):
+            o["modified"] = e["modified"]
+    out = []
+    for o in orders.values():
+        o["sheets"].sort(key=lambda s: s["part"])
+        o["total"] = max(s["total"] for s in o["sheets"])
+        o["urgent"] = any(s["urgent"] for s in o["sheets"])
+        o["reprint"] = any(s["reprint"] for s in o["sheets"])
+        o["locked"] = sum(1 for s in o["sheets"] if s["claimedBy"])
+        o["printed"] = sum(1 for s in o["sheets"] if s["printedBy"])
+        o["inches"] = sum(int((s["inch"] or "0").rstrip('"') or 0) * s["copies"] for s in o["sheets"])
+        out.append(o)
+    out.sort(key=lambda o: (not o["urgent"], o["modified"] or ""))
+    return out
+
+
+def _folder_stats(path: str, fresh: bool = False) -> dict:
+    entries = _decorate_entries(dbx.list_folder(path, use_cache=not fresh))
+    orders = _group_orders(entries)
+    return {"files": sum(len(o["sheets"]) for o in orders), "orders": len(orders),
+            "inches": sum(o["inches"] for o in orders), "urgent": sum(1 for o in orders if o["urgent"]),
+            "locked": sum(o["locked"] for o in orders),
+            "subfolders": [e["name"] for e in entries if e.get("type") == "folder"]}
+
+
+@app.get("/api/dropbox/overview")
+async def dropbox_overview(fresh: Optional[int] = Query(0)):
+    """Mobile /files page: every category → store folder with how many files / orders /
+    inches are waiting (printable files directly in the store folder; BASILDI etc. are
+    not counted). Listings are fetched in parallel and share the agents' 20 s cache."""
+    if not dbx.configured():
+        return JSONResponse({"status": "error", "message": "Dropbox not configured"}, status_code=503)
+    try:
+        return await asyncio.to_thread(_overview_sync, bool(fresh))
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+def _overview_sync(fresh: bool) -> dict:
+    from concurrent.futures import ThreadPoolExecutor
+    root = dbx.DBX_ROOT_PATH
+    if True:
+        cats = [e for e in dbx.list_folder(root, use_cache=not fresh) if e.get("type") == "folder"]
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            store_lists = list(ex.map(lambda c: [e for e in dbx.list_folder(c["path"], use_cache=not fresh) if e.get("type") == "folder"], cats))
+            jobs = [(ci, s) for ci, stores in enumerate(store_lists) for s in stores]
+            stats = list(ex.map(lambda j: _folder_stats(j[1]["path"], bool(fresh)), jobs))
+        out = []
+        for ci, c in enumerate(cats):
+            stores = []
+            for (cj, s), st in zip(jobs, stats):
+                if cj == ci:
+                    stores.append({"name": s["name"], "path": s["path"], **st})
+            stores.sort(key=lambda s: (-s["files"], s["name"].lower()))
+            out.append({"name": c["name"], "path": c["path"], "stores": stores,
+                        "files": sum(s["files"] for s in stores), "orders": sum(s["orders"] for s in stores),
+                        "inches": sum(s["inches"] for s in stores), "urgent": sum(s["urgent"] for s in stores)})
+        out.sort(key=lambda c: c["name"].lower())
+        return {"status": "ok", "root": root, "categories": out, "now": _q_now()}
+
+
+@app.get("/api/dropbox/folder")
+async def dropbox_folder(path: Optional[str] = Query(None), fresh: Optional[int] = Query(0)):
+    """Mobile /files page: one folder as grouped orders (+ its subfolders)."""
+    if not dbx.configured():
+        return JSONResponse({"status": "error", "message": "Dropbox not configured"}, status_code=503)
+    p = path or dbx.DBX_ROOT_PATH
+    try:
+        entries = await asyncio.to_thread(lambda: _decorate_entries(dbx.list_folder(p, use_cache=not fresh)))
+        return {"status": "ok", "path": p, "orders": _group_orders(entries),
+                "subfolders": [{"name": e["name"], "path": e["path"]} for e in entries if e.get("type") == "folder"],
+                "now": _q_now()}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
+@app.get("/api/dropbox/find")
+async def dropbox_find(q: Optional[str] = Query(None)):
+    """Mobile /files page: search all of PRODUCTION, grouped into orders with their folder."""
+    if not dbx.configured():
+        return JSONResponse({"status": "error", "message": "Dropbox not configured"}, status_code=503)
+    query = (q or "").strip()
+    if len(query) < 2:
+        return {"status": "ok", "query": query, "orders": []}
+    try:
+        entries = await asyncio.to_thread(lambda: _decorate_entries(dbx.search(query)))
+        orders = _group_orders(entries)
+        for o in orders:
+            parts = (o["sheets"][0]["path"] or "").split("/")
+            o["folder"] = "/".join(parts[-3:-1]) if len(parts) > 2 else ""
+        return {"status": "ok", "query": query, "orders": orders}
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:300]}, status_code=502)
+
+
 @app.get("/api/dropbox/search")
 async def dropbox_search(q: Optional[str] = Query(None)):
     if not dbx.configured():
@@ -1460,6 +1574,12 @@ async def queue_all_ep(request: Request):
 @app.get("/queue")
 async def serve_queue_board():
     return FileResponse(os.path.join(STATIC_DIR, "queue.html"))
+
+
+@app.get("/files")
+async def serve_files_page():
+    """Phone-friendly view of the Dropbox Print Files folders (counts, orders, search)."""
+    return FileResponse(os.path.join(STATIC_DIR, "files.html"))
 
 
 @app.post("/api/sheet-status")

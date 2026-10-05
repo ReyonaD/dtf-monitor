@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/static/favicon.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0A0B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Print Files</title>
+<style>
+  :root{--bg:#0A0A0B;--surface:#111113;--surface2:#19191D;--surface3:#222228;--border:#26262e;--text:#F1F0EA;--muted:#8b8b97;--faint:#5a5a66;
+        --accent:#a78bfa;--accent-dim:rgba(139,92,246,.16);--green:#3DCF82;--green-dim:rgba(61,207,130,.14);--warn:#fbbf24;--red:#ef4444;--red-dim:rgba(239,68,68,.16);
+        --mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;--ui:system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)}
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;border-bottom:1px solid var(--border);background:rgba(17,17,19,.92);backdrop-filter:blur(10px)}
+  header h1{font-size:15px;margin:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+  header h1 small{color:var(--muted);font-weight:500;font-size:12px;margin-left:6px}
+  .ibtn{height:34px;min-width:34px;padding:0 10px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:inherit}
+  .ibtn:active{background:var(--surface3)}
+  .ibtn.spin svg{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .search{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .search input{flex:1;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 12px;font-size:16px;font-family:inherit;outline:none}
+  .search input:focus{border-color:var(--accent)}
+  main{padding:12px 14px 40px;max-width:720px;margin:0 auto}
+  .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .sum .k{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .sum .k b{display:block;font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums;line-height:1.1}
+  .sum .k span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .sum .k.u b{color:var(--red)}
+  .cat{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px}
+  .ch{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+  .ch .nm{font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ch .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--text)}
+  .ch .n small{color:var(--muted);font-family:var(--ui);margin-left:3px}
+  .ch .ar{color:var(--faint);transition:transform .15s}
+  .cat.open .ch .ar{transform:rotate(90deg)}
+  .stores{display:none}
+  .cat.open .stores{display:block}
+  .st{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .st:last-child{border-bottom:0}
+  .st:active{background:var(--surface2)}
+  .st .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .st .nm small{display:block;color:var(--faint);font-size:11px;margin-top:2px}
+  .st.zero .nm{color:var(--faint)}
+  .badge{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:var(--mono);font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+  .badge.zero{background:var(--surface2);color:var(--faint);font-weight:500}
+  .badge.red{background:var(--red-dim);color:var(--red)}
+  .tag{display:inline-block;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.4px;vertical-align:middle}
+  .tag.u{background:var(--red);color:#fff}.tag.r{background:#2563eb;color:#fff}
+  .crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:2px 0 10px;flex-wrap:wrap}
+  .crumb a{color:var(--accent);text-decoration:none}
+  .sub{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .sub button{height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12.5px;font-family:inherit}
+  .order{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--border)}
+  .order.urg{border-left-color:var(--red)}
+  .order.done{opacity:.55}
+  .oh{display:flex;align-items:center;gap:8px}
+  .oh .code{font-family:var(--mono);font-weight:700;font-size:15px}
+  .oh .right{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cust{color:var(--muted);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cust .fold{color:var(--faint)}
+  .sheets{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .sh{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-family:var(--mono)}
+  .sh .p{color:var(--muted)}
+  .sh.lk{border-color:rgba(251,191,36,.4);color:var(--warn)}
+  .sh.pr{border-color:rgba(61,207,130,.4);color:var(--green)}
+  .empty{padding:40px 10px;text-align:center;color:var(--faint);font-size:13px}
+  .err{padding:14px;border-radius:10px;background:var(--red-dim);color:#fca5a5;font-size:13px;margin-bottom:12px}
+  .upd{text-align:center;color:var(--faint);font-size:11px;margin-top:16px}
+  .nav{display:flex;gap:8px;padding:10px 14px 0}
+  .nav a{color:var(--muted);text-decoration:none;font-size:12px;border:1px solid var(--border);padding:5px 10px;border-radius:7px}
+</style>
+</head>
+<body>
+<header>
+  <button class="ibtn" id="back" hidden aria-label="Back">‹</button>
+  <h1 id="title">Print Files <small id="sub"></small></h1>
+  <button class="ibtn" id="refresh" aria-label="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+</header>
+<div class="search"><input id="q" type="search" placeholder="Search order code or customer — all of PRODUCTION" autocomplete="off" autocapitalize="characters"></div>
+<main id="main"><div class="empty">Loading…</div></main>
+<script>
+  const $=s=>document.querySelector(s);
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmtN=n=>Number(n||0).toLocaleString();
+  const ago=iso=>{if(!iso)return '';const m=Math.round((Date.now()-new Date(iso).getTime())/60000);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.floor(m/60);if(h<24)return h+' h ago';return Math.floor(h/24)+' d ago';};
+  let VIEW={kind:'overview'}, OPEN=new Set(JSON.parse(localStorage.getItem('pf-open')||'[]')), timer=null, loading=false;
+  const main=$('#main'), title=$('#title'), sub=$('#sub'), back=$('#back'), refresh=$('#refresh'), q=$('#q');
+
+  async function get(url){const r=await fetch(url,{credentials:'same-origin'});if(r.status===401||r.redirected&&/\/login/.test(r.url)){location.href='/login';throw new Error('login');}return r.json();}
+
+  function sheetChip(s){
+    const cls=s.printedBy?' pr':s.claimedBy?' lk':'';
+    const who=s.printedBy?('✓ '+(s.printedBy.machine||'')):s.claimedBy?('🔒 '+(s.claimedBy.machine||'')):(s.inch||'');
+    return `<span class="sh${cls}" title="${esc(s.name)}"><span class="p">#${s.part}${s.total>1?'/'+s.total:''}</span>${esc(who)}${s.copies>1?' ×'+s.copies:''}</span>`;
+  }
+  function orderCard(o,showFolder){
+    const open=o.sheets.filter(s=>!s.printedBy).length;
+    return `<div class="order${o.urgent?' urg':''}${open===0?' done':''}">
+      <div class="oh"><span class="code">${esc(o.code)}</span>${o.urgent?'<span class="tag u">URGENT</span>':''}${o.reprint?'<span class="tag r">REPRINT</span>':''}<span class="right">${o.total>1?o.sheets.length+(o.sheets.length<o.total?' of '+o.total:'')+' sheets · ':''}${fmtN(o.inches)}"</span></div>
+      <div class="cust">${esc(o.cust||'—')}${showFolder&&o.folder?` <span class="fold">· 📁 ${esc(o.folder)}</span>`:''}${o.modified?` <span class="fold">· ${ago(o.modified)}</span>`:''}</div>
+      <div class="sheets">${o.sheets.map(sheetChip).join('')}</div></div>`;
+  }
+
+  function renderOverview(d){
+    const files=d.categories.reduce((a,c)=>a+c.files,0), orders=d.categories.reduce((a,c)=>a+c.orders,0), urgent=d.categories.reduce((a,c)=>a+c.urgent,0);
+    let h=`<div class="sum"><div class="k"><b>${fmtN(files)}</b><span>files waiting</span></div><div class="k"><b>${fmtN(orders)}</b><span>orders</span></div><div class="k${urgent?' u':''}"><b>${fmtN(urgent)}</b><span>urgent</span></div></div>`;
+    for(const c of d.categories){
+      const isOpen=OPEN.has(c.path)||(OPEN.size===0&&c.files>0&&c===d.categories.find(x=>x.files>0));
+      h+=`<section class="cat${isOpen?' open':''}" data-path="${esc(c.path)}"><div class="ch"><span class="nm">📁 ${esc(c.name)}</span>${c.urgent?`<span class="badge red" title="urgent orders">${c.urgent}</span>`:''}<span class="n">${fmtN(c.files)}<small>files</small></span><span class="n">${fmtN(c.orders)}<small>orders</small></span><span class="ar">›</span></div><div class="stores">`;
+      for(const s of c.stores){
+        h+=`<div class="st${s.files?'':' zero'}" data-path="${esc(s.path)}" data-name="${esc(c.name+' / '+s.name)}"><span class="nm">${esc(s.name)}<small>${s.orders?fmtN(s.orders)+' orders · '+fmtN(s.inches)+'"':'empty'}${s.locked?' · 🔒 '+s.locked+' being printed':''}</small></span>${s.urgent?`<span class="badge red">${s.urgent}</span>`:''}<span class="badge${s.files?'':' zero'}">${s.files}</span></div>`;
+      }
+      h+=`</div></section>`;
+    }
+    h+=`<div class="upd">Updated ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · counts are files directly in each store folder (BASILDI not counted) · refreshes every 60 s</div>`;
+    main.innerHTML=h;
+    main.querySelectorAll('.ch').forEach(el=>el.addEventListener('click',()=>{const sec=el.parentElement,p=sec.dataset.path;sec.classList.toggle('open');if(sec.classList.contains('open'))OPEN.add(p);else OPEN.delete(p);localStorage.setItem('pf-open',JSON.stringify([...OPEN]));}));
+    main.querySelectorAll('.st').forEach(el=>el.addEventListener('click',()=>go({kind:'folder',path:el.dataset.path,name:el.dataset.name})));
+  }
+  function renderFolder(d,name){
+    const parts=(d.path||'').split('/').filter(Boolean);
+    let h=`<div class="crumb"><a href="#" id="home">All folders</a> › ${esc(name||parts.slice(-2).join(' / '))}</div>`;
+    if(d.subfolders.length) h+=`<div class="sub">${d.subfolders.map(s=>`<button data-path="${esc(s.path)}" data-name="${esc((name||'')+' / '+s.name)}">📁 ${esc(s.name)}</button>`).join('')}</div>`;
+    const open=d.orders.filter(o=>o.sheets.some(s=>!s.printedBy)), done=d.orders.length-open.length;
+    h+=d.orders.length?d.orders.map(o=>orderCard(o,false)).join(''):`<div class="empty">No print files directly in this folder.</div>`;
+    h+=`<div class="upd">${fmtN(open.length)} orders waiting${done?` · ${done} already printed`:''} · ${fmtN(d.orders.reduce((a,o)=>a+o.inches,0))}" total · updated ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
+    main.innerHTML=h;
+    $('#home').addEventListener('click',e=>{e.preventDefault();go({kind:'overview'});});
+    main.querySelectorAll('.sub button').forEach(b=>b.addEventListener('click',()=>go({kind:'folder',path:b.dataset.path,name:b.dataset.name})));
+  }
+  function renderSearch(d){
+    main.innerHTML=(d.orders.length?d.orders.map(o=>orderCard(o,true)).join(''):`<div class="empty">No results for “${esc(d.query)}”.</div>`);
+  }
+
+  async function load(fresh){
+    if(loading)return; loading=true; refresh.classList.add('spin');
+    try{
+      if(VIEW.kind==='overview'){const d=await get('/api/dropbox/overview'+(fresh?'?fresh=1':''));if(d.status!=='ok')throw new Error(d.message||'failed');renderOverview(d);}
+      else if(VIEW.kind==='folder'){const d=await get('/api/dropbox/folder?path='+encodeURIComponent(VIEW.path)+(fresh?'&fresh=1':''));if(d.status!=='ok')throw new Error(d.message||'failed');renderFolder(d,VIEW.name);}
+      else if(VIEW.kind==='search'){const d=await get('/api/dropbox/find?q='+encodeURIComponent(VIEW.q));if(d.status!=='ok')throw new Error(d.message||'failed');renderSearch(d);}
+    }catch(e){ if(e.message!=='login') main.innerHTML=`<div class="err">Could not load: ${esc(e.message)}</div>`; }
+    finally{ loading=false; refresh.classList.remove('spin'); }
+  }
+  function go(v){
+    VIEW=v; back.hidden=v.kind==='overview';
+    title.firstChild.textContent=v.kind==='overview'?'Print Files ':v.kind==='search'?'Search ':(v.name||'').split(' / ').pop()+' ';
+    sub.textContent=v.kind==='folder'?(v.name||'').split(' / ').slice(0,-1).join(' / '):v.kind==='search'?v.q:'';
+    if(v.kind!=='search'){q.value='';}
+    main.innerHTML='<div class="empty">Loading…</div>'; window.scrollTo(0,0); load(false);
+  }
+  back.addEventListener('click',()=>go({kind:'overview'}));
+  refresh.addEventListener('click',()=>load(true));
+  let qt=null; q.addEventListener('input',()=>{clearTimeout(qt);const v=q.value.trim();qt=setTimeout(()=>{ if(v.length>=2){VIEW={kind:'search',q:v};back.hidden=false;title.firstChild.textContent='Search ';sub.textContent=v;load(false);} else if(VIEW.kind==='search'){go({kind:'overview'});} },350);});
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(false); });
+  setInterval(()=>{ if(!document.hidden && VIEW.kind!=='search') load(false); },60000);
+  go({kind:'overview'});
+</script>
+</body>
+</html>
