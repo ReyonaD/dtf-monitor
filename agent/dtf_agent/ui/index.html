@@ -620,6 +620,7 @@
     const items=picked.map(x=>({path:x.s.path,copies:x.s.copies||1,force:!!x.s.claimedBy}));
     if(!items.length)return;
     printBtn.disabled=true; printBtn.innerHTML='⏳ Downloading…';
+    try{
     // live progress bar (polls Python while the download runs)
     const fmtMB=b=>(b/1048576).toFixed(1)+' MB';
     const dl=document.getElementById('dlprog'),fill=document.getElementById('dlfill'),txt=document.getElementById('dltxt'),tgt=document.getElementById('target');
@@ -648,11 +649,15 @@
         res={ok:[...(res.ok||[]),...(r2.ok||[])],failed:[...(res.failed||[]).filter(f=>!f.taken),...(r2.failed||[])]};
       } else res={ok:res.ok||[],failed:(res.failed||[]).filter(f=>!f.taken)};
     }
-    clearInterval(poll); fill.style.width='100%'; txt.innerHTML=`<b>${res.ok?res.ok.length:0}</b> file(s) in hot folder ✓`;
+    // (1.3.4–1.3.5 bug: a leftover clearInterval on an undefined timer threw here, so the bar stayed on
+    // "N of N done", no ✓, the selection survived and operators re-downloaded files.)
+    fill.style.width='100%'; txt.innerHTML=`<b>${res.ok?res.ok.length:0}</b> file(s) in hot folder ✓`;
     setTimeout(()=>{dl.hidden=true;tgt.hidden=false;},1800);
     if(res.failed&&res.failed.length) alert((res.ok?res.ok.length:0)+' file(s) downloaded.\n\nFailed: '+res.failed.length+'\n'+res.failed.map(f=>f.error||'').join('\n'));
     sel.clear(); navigate(curPath);
     await loadQueue(); switchTab('queue');   // the files now sit in this machine's queue as "Downloaded"
+    }catch(e){ alert('Download finished, but the screen hit an error: '+e.message); }
+    finally{ sel.clear(); dl.hidden=true; tgt.hidden=false; printBtn.disabled=false; printBtn.innerHTML='⬇ Download <span class="n">0</span> sheets'; }
   });
   // ── search across all of PRODUCTION (Dropbox indexes it server-side) ──
   const searchInput=document.getElementById('searchInput'), searchClear=document.getElementById('searchClear');

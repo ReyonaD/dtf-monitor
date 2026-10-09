@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.5"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
+AGENT_VERSION = "1.3.6"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"

@@ -202,6 +202,12 @@ done) — so a long batch never depends on one JS→Python call staying alive. C
 sequentially (first machine wins), numbers (`36-- …`) assigned up front in selection order,
 then **3 downloads run in parallel**, each registered in the queue as soon as it lands.
 A failed listing keeps retrying every 10 s instead of leaving an empty screen.
+**1.3.4–1.3.5 regression (fixed 1.3.6):** the Download handler still called
+`clearInterval(poll)` on a timer that no longer existed → ReferenceError after every batch:
+bar stuck on "N of N done", no ✓, selection kept, Queue tab not opened — operators thought
+it failed and re-downloaded from BASILDI (duplicate `54--`/`55--` files). The handler is now
+try/finally: the UI is always restored and the selection always cleared. Check the page
+script with `node scratch/jscheck.js index.html` (new Function() parse) before building.
 
 ## Phone view of Print Files — `/files` (2026-10-04)
 `server/static/files.html`, session-protected like `/queue` (log in once on the phone; the
