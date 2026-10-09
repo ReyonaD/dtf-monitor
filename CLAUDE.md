@@ -156,6 +156,14 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   `camera.stop(halt=True)` (no respawn, waits until the worker is gone, worker honours the
   stopfile even mid-open) runs before any exit; 1.3.2 made the exit clean (window/tray closed,
   interpreter exits normally, updater bat in a hidden console) instead of `os._exit`.
+  **The real culprit (found 2026-10-09, fixed in 1.3.5):** the updater bat was spawned with
+  the agent's environment, which carries PyInstaller's `_PYI_ARCHIVE_FILE` /
+  `_PYI_PARENT_PROCESS_LEVEL` / `_PYI_APPLICATION_HOME_DIR`; the NEW exe started by the bat
+  therefore treated itself as a child of the dying agent and reused its `_MEI` dir → died with
+  "Failed to load Python DLL" / "Failed to execute script" once the old bootloader deleted the
+  dir, and the operator had to reopen the agent by hand. `_do_update` now launches the bat
+  with those variables stripped (and the bat `set`s them empty too). Any spawn of
+  `sys.executable` from the frozen agent that must outlive it needs the same scrubbing.
   Downloads are verified against `size`+`sha256` from `/api/agent/version` (1.3.3+), so a
   server restart mid-transfer just means "retry later" — still, **don't `railway up` while
   machines are updating** if you can help it. Old builds (≤1.3.2) may show one of the dialogs

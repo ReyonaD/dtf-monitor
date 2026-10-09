@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.4"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
+AGENT_VERSION = "1.3.5"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"
@@ -505,6 +505,8 @@ class Heartbeat(threading.Thread):
             bat_path = os.path.join(exe_dir, "_update.bat")
             bat = (
                 "@echo off\r\nsetlocal\r\n"
+                # belt and braces: scrub the PyInstaller variables inside the bat as well
+                'set "_PYI_ARCHIVE_FILE="\r\nset "_PYI_PARENT_PROCESS_LEVEL="\r\nset "_PYI_APPLICATION_HOME_DIR="\r\nset "_PYI_SPLASH_IPC="\r\nset "_MEIPASS2="\r\n'
                 f'set "EXE={exe_path}"\r\nset "NEW={new_path}"\r\n'
                 "set /a tries=0\r\n:waitloop\r\n"
                 'del "%EXE%" 2>nul\r\nif not exist "%EXE%" goto swap\r\n'
@@ -524,7 +526,13 @@ class Heartbeat(threading.Thread):
                 except Exception:
                     pass
             NO_WINDOW = 0x08000000 | 0x00000200   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP (timeout needs a console, just a hidden one)
-            subprocess.Popen(["cmd", "/c", bat_path], creationflags=NO_WINDOW, close_fds=True)
+            # The bat (and the new exe it starts) must NOT inherit PyInstaller's _PYI_* env:
+            # with them set, the new exe believes it is a child of THIS onefile process and
+            # reuses our _MEI temp dir — which the bootloader deletes as we exit → the new
+            # agent died with "Failed to load Python DLL" / "Failed to execute script" and
+            # had to be reopened by hand (seen on every self-update up to 1.3.4).
+            env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI_") and k != "_MEIPASS2"}
+            subprocess.Popen(["cmd", "/c", bat_path], creationflags=NO_WINDOW, close_fds=True, env=env)
             if REQUEST_EXIT is not None:
                 # close the window → webview.start() returns → main() shuts down → clean interpreter exit
                 threading.Timer(25, lambda: os._exit(0)).start()   # safety net if the window won't close
