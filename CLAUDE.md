@@ -144,7 +144,10 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   new build reaches ONLY the machines already on the new agent. **Publish a new-agent build:**
   bump `AGENT_VERSION` in `agent/dtf_agent/core.py` → `python -m PyInstaller build_agent.spec`
   → `curl -H "X-Api-Key: $OT_API_KEY" -F channel=new -F version=1.3.x -F file=@agent/dist/DTF-Monitor-Agent.exe https://dtfproductionstatus.com/api/agent/upload`
-  (OT_API_KEY = `railway variables --service dtf-monitor --json`). Agents pick it up on the
+  (OT_API_KEY = `railway variables --service dtf-monitor --json`). If the upload answers
+  Cloudflare `error code: 524` (100 s proxy timeout on a slow upload), post to the direct
+  Railway domain instead: `https://dtf-monitor-production.up.railway.app/api/agent/upload`.
+  Agents pick it up on the
   next heartbeat (≤ 8 s), download, swap via `_update.bat`, relaunch. The camera worker is the
   same exe, so `core.BEFORE_UPDATE` (camera.stop) runs before the swap and the bat force-kills
   a leftover `--camera-worker` process after 20 s.
