@@ -8,6 +8,8 @@ queue), read this machine's queue, report RIP'd from the local RIPLOG, scan code
 """
 import os
 import json
+import time
+import threading
 import urllib.parse
 import urllib.error
 import webview
@@ -97,21 +99,33 @@ class Api:
             return {"status": "error", "message": str(e)}
 
     def print_files(self, items):
-        """items: [{path, copies}]. Claim each file (so no other machine grabs it),
-        download it once into the hot folder and register it in this machine's
-        server-side queue (the server moves the Dropbox file to BASILDI right away)."""
+        """items: [{path, copies, force}]. Starts the job in a background thread and
+        returns at once; the UI polls download_progress() until active=False and reads
+        `result`. (A long JS→Python call used to die on big batches, and with it the
+        rest of the batch.) Claims are taken one by one (first machine wins), then the
+        files download 3 at a time, resuming on network drops, and each one is
+        registered in this machine's server-side queue as soon as it is on disk."""
+        if PROGRESS.get("active"):
+            return {"status": "busy"}
+        PROGRESS.update(active=True, count=len(items), finished=0, index=0, file="", done=0, total=0,
+                        files={}, result=None, started=time.time())
+        threading.Thread(target=self._print_files_job, args=(list(items),), daemon=True).start()
+        return {"status": "started", "count": len(items)}
+
+    def _print_files_job(self, items):
+        from concurrent.futures import ThreadPoolExecutor
         hot = CFG["hotFolder"]
-        os.makedirs(hot, exist_ok=True)
         ok, failed = [], []
-        PROGRESS.update(active=True, count=len(items), index=0, file="", done=0, total=0)
-        for i, it in enumerate(items):
-            p = it.get("path")
-            copies = max(1, int(it.get("copies", 1) or 1))
-            try:
-                base = os.path.basename(p)
-                PROGRESS.update(index=i + 1, file=base, done=0, total=0)
+        lock = threading.Lock()
+        try:
+            os.makedirs(hot, exist_ok=True)
+            # 1) claim (sequential, fast) — decides which files are ours
+            todo = []
+            for it in items:
+                p = it.get("path")
                 try:
                     core.post_json("/api/dropbox/claim", {"path": p, "force": bool(it.get("force")), **core.who()})
+                    todo.append(it)
                 except urllib.error.HTTPError as he:
                     if he.code == 409:   # another machine took it first — don't download it twice
                         try:
@@ -122,25 +136,58 @@ class Api:
                         if by.get("operator"):
                             who += f" ({by['operator']})"
                         failed.append({"path": p, "taken": True, "error": f"taken by {who} {by.get('secondsAgo', 0)} s ago"})
-                        continue
-                    raise
-                link = core.post_json("/api/dropbox/temp-link", {"path": p}).get("link")
-                if not link:
-                    raise RuntimeError("no download link")
-                n = core.next_download_number(hot)          # "36-- <file>" — keeps the operators' numbering habit
-                first = os.path.join(hot, core.numbered(n, base))
-                core.download(link, first)
-                ok.append(os.path.basename(first))
-                # (Nx) copies: ONE file is downloaded; the operator sets copies in Flexi. The
-                # queue still knows `copies`, so the oven expects that many scans.
-                core.post_json("/api/queue/assign", {"path": p, "hot_path": first, "copies": copies, **core.who()})
-            except Exception as e:
-                failed.append({"path": p, "error": str(e)})
-        PROGRESS["active"] = False
-        return {"ok": ok, "failed": failed, "hotFolder": hot}
+                    else:
+                        failed.append({"path": p, "error": core.err_text(he)})
+                except Exception as e:
+                    failed.append({"path": p, "error": core.err_text(e)})
+            # 2) numbers up front so "36-- a", "37-- b" follow the selection order
+            n0 = core.next_download_number(hot)
+            for i, it in enumerate(todo):
+                it["_n"] = n0 + i
+            PROGRESS["files"] = {os.path.basename(it["path"]): {"done": 0, "total": 0} for it in todo}
+
+            def one(it):
+                p = it["path"]
+                base = os.path.basename(p)
+                copies = max(1, int(it.get("copies", 1) or 1))
+                try:
+                    link = core.post_json("/api/dropbox/temp-link", {"path": p}).get("link")
+                    if not link:
+                        raise RuntimeError("no download link")
+                    dest = os.path.join(hot, core.numbered(it["_n"], base))
+
+                    def prog(done, total):
+                        with lock:
+                            PROGRESS["files"][base] = {"done": done, "total": total}
+                            PROGRESS["file"] = base
+                    core.download(link, dest, on_progress=prog)
+                    # (Nx) copies: ONE file is downloaded; the operator sets copies in Flexi. The
+                    # queue still knows `copies`, so the oven expects that many scans.
+                    core.post_json("/api/queue/assign", {"path": p, "hot_path": dest, "copies": copies, **core.who()})
+                    with lock:
+                        ok.append(os.path.basename(dest))
+                except Exception as e:
+                    with lock:
+                        failed.append({"path": p, "error": core.err_text(e)})
+                finally:
+                    with lock:
+                        PROGRESS["finished"] = PROGRESS.get("finished", 0) + 1
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                list(ex.map(one, todo))
+        except Exception as e:
+            failed.append({"error": core.err_text(e)})
+        finally:
+            PROGRESS["result"] = {"ok": ok, "failed": failed, "hotFolder": hot}
+            PROGRESS["active"] = False
 
     def download_progress(self):
-        return dict(PROGRESS)
+        p = dict(PROGRESS)
+        files = dict(p.get("files") or {})
+        p["done"] = sum(f["done"] for f in files.values())
+        p["total"] = sum(f["total"] for f in files.values())
+        p["known"] = sum(1 for f in files.values() if f["total"])
+        p["files"] = files
+        return p
 
     # ── queue (server-side) ──
     def _my_queue(self):

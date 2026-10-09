@@ -208,7 +208,8 @@ def init_db():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sheet_queue_code ON sheet_queue(code)")
-    for col, ddl in (("ot_downloaded", "TEXT DEFAULT ''"), ("urgent", "INTEGER DEFAULT 0"), ("reprint", "INTEGER DEFAULT 0")):
+    for col, ddl in (("ot_downloaded", "TEXT DEFAULT ''"), ("urgent", "INTEGER DEFAULT 0"), ("reprint", "INTEGER DEFAULT 0"),
+                     ("rush", "INTEGER DEFAULT 0")):
         try:  # migrations for tables created before these columns existed
             conn.execute(f"ALTER TABLE sheet_queue ADD COLUMN {col} {ddl}")
             conn.commit()
@@ -1078,6 +1079,7 @@ def _q_dict(row):
     d["manual"] = bool(d.get("manual"))
     d["cleared"] = bool(d.get("cleared"))
     d["urgent"] = bool(d.get("urgent"))
+    d["rush"] = bool(d.get("rush"))
     d["reprint"] = bool(d.get("reprint"))
     return d
 
@@ -1089,19 +1091,19 @@ def queue_assign(machine: str, operator: str, path: str, name: str, meta: dict,
     conn = get_connection()
     conn.execute("""
         INSERT INTO sheet_queue (machine, operator, path, name, code, part, total, copies,
-                                 inch, cust, hot_path, assigned_at, urgent, reprint)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 inch, cust, hot_path, assigned_at, urgent, reprint, rush)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(machine, path) DO UPDATE SET
             operator=excluded.operator, name=excluded.name, code=excluded.code,
             part=excluded.part, total=excluded.total, copies=excluded.copies,
             inch=excluded.inch, cust=excluded.cust, hot_path=excluded.hot_path,
-            assigned_at=excluded.assigned_at, urgent=excluded.urgent, reprint=excluded.reprint,
+            assigned_at=excluded.assigned_at, urgent=excluded.urgent, reprint=excluded.reprint, rush=excluded.rush,
             ripped_at=NULL, printed_at=NULL, printed_count=0, extra_scans=0, manual=0,
             printed_machine='', printed_operator='', moved_to='', move_error='',
             ot_ripped='', ot_printed='', cleared=0
     """, (machine, operator or "", path, name, meta.get("code") or "", meta.get("part", 1),
           meta.get("total", 1), copies, meta.get("inch", ""), meta.get("cust", ""), hot_path or "", now,
-          1 if meta.get("urgent") else 0, 1 if meta.get("reprint") else 0))
+          1 if meta.get("urgent") else 0, 1 if meta.get("reprint") else 0, 1 if meta.get("rush") else 0))
     conn.commit()
     row = conn.execute("SELECT * FROM sheet_queue WHERE machine = ? AND path = ?", (machine, path)).fetchone()
     conn.close()
@@ -1126,7 +1128,7 @@ _Q_OPEN = "cleared = 0 AND (printed_at IS NULL OR printed_at >= ?)"
 
 def queue_list(machine: str) -> list:
     conn = get_connection()
-    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE machine = ? AND {_Q_OPEN} ORDER BY urgent DESC, assigned_at",
+    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE machine = ? AND {_Q_OPEN} ORDER BY rush DESC, urgent DESC, assigned_at",
                         (machine, _q_day_start_utc())).fetchall()
     conn.close()
     return [_q_dict(r) for r in rows]
@@ -1134,7 +1136,7 @@ def queue_list(machine: str) -> list:
 
 def queue_all() -> list:
     conn = get_connection()
-    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE {_Q_OPEN} ORDER BY machine, urgent DESC, assigned_at",
+    rows = conn.execute(f"SELECT * FROM sheet_queue WHERE {_Q_OPEN} ORDER BY machine, rush DESC, urgent DESC, assigned_at",
                         (_q_day_start_utc(),)).fetchall()
     conn.close()
     return [_q_dict(r) for r in rows]

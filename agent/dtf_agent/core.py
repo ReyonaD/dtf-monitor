@@ -19,7 +19,7 @@ from .riplog import RIPLogParser, RIPLogWatcher
 
 # Bump every time a new agent build is shipped (the server advertises the newest
 # version in each heartbeat reply; older agents download it and relaunch).
-AGENT_VERSION = "1.3.3"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
+AGENT_VERSION = "1.3.4"  # new agent line ("new" release channel on the server; legacy agents stay on 1.2.x)
 
 # Edge/CDN bot filters 403 the default "Python-urllib" UA — send a real one.
 UA = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) DTF-Monitor-Agent/{AGENT_VERSION}"
@@ -146,20 +146,50 @@ def _ssl_context():
 _SSL = _ssl_context()
 
 
-def get_json(path, params=None, timeout=25):
+def _transient(e) -> bool:
+    """Network-level failures worth a retry: DNS/TCP/TLS handshake timeouts, resets.
+    HTTP answers (4xx/5xx) are NOT retried — a 409 'taken' must reach the caller."""
+    import socket, ssl
+    if isinstance(e, urllib.error.HTTPError):
+        return False
+    return isinstance(e, (urllib.error.URLError, socket.timeout, TimeoutError, ssl.SSLError,
+                          ConnectionError, OSError))
+
+
+def _with_retry(fn, tries=3, delay=1.0):
+    """The printer PCs' internet drops TLS handshakes now and then ("_ssl.c: The handshake
+    operation timed out"); one retry a second later almost always goes through."""
+    last = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            if not _transient(e) or i == tries - 1:
+                raise
+            last = e
+            time.sleep(delay * (i + 1))
+    raise last
+
+
+def get_json(path, params=None, timeout=25, tries=3):
     url = f"{server()}{path}"
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=_headers())
-    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
-        return json.loads(r.read().decode())
+
+    def go():
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
+            return json.loads(r.read().decode())
+    return _with_retry(go, tries)
 
 
-def post_json(path, body, timeout=30):
-    req = urllib.request.Request(f"{server()}{path}", data=json.dumps(body).encode(),
-                                 headers=_headers(json_body=True), method="POST")
-    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
-        return json.loads(r.read().decode())
+def post_json(path, body, timeout=30, tries=3):
+    def go():
+        req = urllib.request.Request(f"{server()}{path}", data=json.dumps(body).encode(),
+                                     headers=_headers(json_body=True), method="POST")
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
+            return json.loads(r.read().decode())
+    return _with_retry(go, tries)
 
 
 # Live download progress, polled by the UI (pywebview runs each JS→Python call on
@@ -167,16 +197,57 @@ def post_json(path, body, timeout=30):
 PROGRESS = {"active": False, "file": "", "done": 0, "total": 0, "index": 0, "count": 0}
 
 
-def download(url, dest, timeout=180):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as resp, open(dest, "wb") as fout:
-        PROGRESS.update(done=0, total=int(resp.headers.get("Content-Length") or 0))
-        while True:
-            chunk = resp.read(256 * 1024)
-            if not chunk:
+def download(url, dest, timeout=60, on_progress=None, tries=4):
+    """Download `url` to `dest`. 1 MB reads; if the connection stalls or drops, the
+    download RESUMES from the bytes already on disk (HTTP Range — Dropbox temp links
+    support it) instead of starting over, up to `tries` attempts. on_progress(done, total)
+    is called as bytes arrive (for the UI); without it the legacy PROGRESS dict is updated."""
+    total = 0
+    done = 0
+    last = None
+    tmp = dest + ".part"
+    for attempt in range(tries):
+        try:
+            headers = {"User-Agent": UA}
+            have = os.path.getsize(tmp) if os.path.exists(tmp) else 0
+            if have:
+                headers["Range"] = f"bytes={have}-"
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as resp:
+                if have and resp.status != 206:      # server ignored Range → start over
+                    have = 0
+                length = int(resp.headers.get("Content-Length") or 0)
+                total = have + length if length else total
+                done = have
+                if on_progress:
+                    on_progress(done, total)
+                else:
+                    PROGRESS.update(done=done, total=total)
+                with open(tmp, "ab" if have else "wb") as fout:
+                    while True:
+                        chunk = resp.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        fout.write(chunk)
+                        done += len(chunk)
+                        if on_progress:
+                            on_progress(done, total)
+                        else:
+                            PROGRESS["done"] = done
+            if total and done < total:
+                raise IOError(f"short download ({done} of {total} bytes)")
+            os.replace(tmp, dest)
+            return
+        except Exception as e:
+            last = e
+            if isinstance(e, urllib.error.HTTPError) and e.code not in (408, 429, 500, 502, 503, 504):
                 break
-            fout.write(chunk)
-            PROGRESS["done"] += len(chunk)
+            time.sleep(1.5 * (attempt + 1))
+    try:
+        os.remove(tmp)
+    except Exception:
+        pass
+    raise last
 
 
 def err_text(e) -> str:

@@ -89,8 +89,11 @@
   #crumbBack{cursor:pointer;color:var(--accent-soft);font-weight:600}
   .urg{display:inline-block;margin-left:7px;padding:1px 6px;border-radius:5px;background:#ef4444;color:#fff;font-family:var(--ui);font-size:9.5px;font-weight:800;letter-spacing:.5px;vertical-align:middle}
   .urg.rep{background:#2563eb}
+  .urg.rush{background:#f97316;color:#111}
   .qcard.urgent{box-shadow:inset 0 2px 0 #ef4444}
+  .qcard.rush{box-shadow:inset 0 2px 0 #f97316}
   .row.urgent .dcode{color:#f87171}
+  .row.rush .dcode{color:#fb923c}
   .code{font-family:var(--mono);font-weight:700;font-size:12.5px;color:var(--accent-soft);background:var(--accent-dim);padding:2px 8px;border-radius:6px;letter-spacing:.3px}
   .status{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px}
   .status .sd{width:6px;height:6px;border-radius:50%}
@@ -441,20 +444,31 @@
     const pm=name.match(/\((\d+)\s*-\s*(\d+)\)/); let total=1,part=1; if(pm){const a=parseInt(pm[1],10),b=parseInt(pm[2],10); if(a<=b){part=a;total=b;}else{total=a;part=b;}}
     const im=name.match(/-(\d+)\s*INCH/i), inch=im?im[1]+'"':'';
     const uv=/(^|[^A-Za-z])UV\b/i.test(name);
-    const urgent=/^\s*\+\+/.test(name); // "++" at the very start of the file name = priority order
+    const rush=/^\s*\+\+\+/.test(name);        // "+++" = RUSH, above urgent
+    const urgent=!rush&&/^\s*\+\+/.test(name);  // "++" at the very start of the file name = priority order
     const reprint=/reprint/i.test(name);  // re-run of an already printed sheet
     let after=name; const cut=name.search(/\(\d+\s*-\s*\d+\)/);
     if(cut>=0) after=name.slice(cut).replace(/^\(\d+\s*-\s*\d+\)\s*/,'');
     else {const c2=name.search(/\(\d+\s*[xX]?\)/); if(c2>=0) after=name.slice(c2).replace(/^\(\d+\s*[xX]?\)\s*[-–]?\s*/,'');}
-    const cust=after.replace(/^\s*\+\+\s*/,'').replace(/^\(\d+\)\s*[-–]?\s*/,'').replace(/-\d+\s*INCH.*$/i,'').replace(/\.[a-z]+$/i,'').replace(/^[\s-]+/,'').trim();
-    return {code,copies,total,part,inch,uv,cust,urgent,reprint};
+    const cust=after.replace(/^\s*\+{1,3}\s*/,'').replace(/^\(\d+\)\s*[-–]?\s*/,'').replace(/-\d+\s*INCH.*$/i,'').replace(/\.[a-z]+$/i,'').replace(/^[\s-]+/,'').trim();
+    return {code,copies,total,part,inch,uv,cust,urgent,rush,reprint,label:displayName(name)};
+  }
+  // The file name minus what is shown elsewhere (code, part, copies, inches, +++ prefix,
+  // extension) — any note typed into the name stays visible. Twin of sheet_names.display_name.
+  function displayName(name){
+    let s=(name||'').replace(/\.[A-Za-z0-9]{2,5}$/,'').replace(/^\s*\+{1,3}\s*/,'');
+    const m=s.match(/([A-Za-z]{1,4}\d+)\s*\(\d+\s*[xX]?\)/);
+    if(m) s=s.slice(0,m.index)+' '+s.slice(m.index+m[0].length); else s=s.replace(/\b([A-Za-z]{1,4}\d{3,})\b/,' ');
+    s=s.replace(/\(\d+\s*-\s*\d+\)/g,' ').replace(/\(\d+\)/g,' ').replace(/-?\s*\d+\s*INCH/ig,' ');
+    s=s.replace(/(\s*[-–]\s*){2,}/g,' - ').replace(/\s{2,}/g,' ').replace(/^[\s\-–]+|[\s\-–]+$/g,'');
+    return s;
   }
   function groupOrders(files){
     const map=new Map();
-    for(const f of files){const pf=parseFile(f.name),code=pf.code||f.name;let o=map.get(code);if(!o){o={code,cust:'',status:'ready',sheets:[]};map.set(code,o);}o.sheets.push({p:pf.part,total:pf.total,inch:pf.inch,copies:pf.copies,here:true,uv:pf.uv,urgent:pf.urgent,reprint:pf.reprint,name:f.name,path:f.path,claimedBy:f.claimedBy||null,printedBy:f.printedBy||null,modified:f.modified||null});if(pf.cust&&!o.cust)o.cust=pf.cust;}
+    for(const f of files){const pf=parseFile(f.name),code=pf.code||f.name;let o=map.get(code);if(!o){o={code,cust:'',status:'ready',sheets:[]};map.set(code,o);}o.sheets.push({p:pf.part,total:pf.total,inch:pf.inch,copies:pf.copies,here:true,uv:pf.uv,urgent:pf.urgent,rush:pf.rush,reprint:pf.reprint,label:pf.label,name:f.name,path:f.path,claimedBy:f.claimedBy||null,printedBy:f.printedBy||null,modified:f.modified||null});if(pf.cust&&!o.cust)o.cust=pf.cust;}
     const arr=[...map.values()];
-    for(const o of arr){o.sheets.sort((a,b)=>a.p-b.p);const t=Math.max(...o.sheets.map(s=>s.total||1));o.sheets.forEach(s=>s.total=t);o.locked=o.sheets.some(s=>s.claimedBy);o.allLocked=o.sheets.every(s=>s.claimedBy);o.urgent=o.sheets.some(s=>s.urgent);o.reprint=o.sheets.some(s=>s.reprint);if(o.sheets.every(s=>s.printedBy))o.status='printed';const pp=(o.sheets[0].path||'').split('/');o.loc=pp.length>1?pp[pp.length-2]:'';o.modified=o.sheets.map(s=>s.modified).filter(Boolean).sort().slice(-1)[0]||null;}
-    arr.sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0)||a.code.localeCompare(b.code));return arr; // urgent first
+    for(const o of arr){o.sheets.sort((a,b)=>a.p-b.p);const t=Math.max(...o.sheets.map(s=>s.total||1));o.sheets.forEach(s=>s.total=t);o.locked=o.sheets.some(s=>s.claimedBy);o.allLocked=o.sheets.every(s=>s.claimedBy);o.urgent=o.sheets.some(s=>s.urgent);o.rush=o.sheets.some(s=>s.rush);o.label=o.sheets[0].label||'';o.reprint=o.sheets.some(s=>s.reprint);if(o.sheets.every(s=>s.printedBy))o.status='printed';const pp=(o.sheets[0].path||'').split('/');o.loc=pp.length>1?pp[pp.length-2]:'';o.modified=o.sheets.map(s=>s.modified).filter(Boolean).sort().slice(-1)[0]||null;}
+    arr.sort((a,b)=>(b.rush?1:0)-(a.rush?1:0)||(b.urgent?1:0)-(a.urgent?1:0)||a.code.localeCompare(b.code));return arr; // rush, then urgent first
   }
   const cx=c=>c>1?`<span class="cx">×${c}</span>`:'';
   // who printed (from the server's BASILDI registry — visible on every PC's agent)
@@ -475,14 +489,14 @@
     const right=multi?total+' sheets':(o.sheets[0].inch||'');
     const loc=(searchMode&&o.loc)?`<div class="qloc">📁 ${o.loc}</div>`:'';
     const nLocked=o.sheets.filter(s=>s.claimedBy).length;
-    return `<div class="qcard${o.allLocked?' locked':''}${selClass(o)}${o.urgent?' urgent':''}" data-code="${o.code}" style="--bar:${storeColor(o.code)}"><div class="qtop"><span class="qcode">${o.code}</span>${o.urgent?'<span class="urg">URGENT</span>':''}${o.reprint?'<span class="urg rep">REPRINT</span>':''}<span class="qright ${multi?'qmulti':''}">${right}</span></div><div class="qcust">${o.cust||'—'}</div>${loc}<div class="qsheets">${rows}</div><div class="qfoot">${statusChip(o)}${o.locked?`<span class="qaway" style="color:var(--warn)">🔒 ${o.allLocked?'assigned':nLocked+'/'+total+' assigned'}</span>`:''}${printedBadge(o,'qaway')}</div></div>`;
+    return `<div class="qcard${o.allLocked?' locked':''}${selClass(o)}${o.rush?' rush':o.urgent?' urgent':''}" data-code="${o.code}" style="--bar:${storeColor(o.code)}"><div class="qtop"><span class="qcode">${o.code}</span>${o.rush?'<span class="urg rush">RUSH</span>':o.urgent?'<span class="urg">URGENT</span>':''}${o.reprint?'<span class="urg rep">REPRINT</span>':''}<span class="qright ${multi?'qmulti':''}">${right}</span></div><div class="qcust" title="${(o.sheets[0].name||'').replace(/"/g,'&quot;')}">${o.label||o.cust||'—'}</div>${loc}<div class="qsheets">${rows}</div><div class="qfoot">${statusChip(o)}${o.locked?`<span class="qaway" style="color:var(--warn)">🔒 ${o.allLocked?'assigned':nLocked+'/'+total+' assigned'}</span>`:''}${printedBadge(o,'qaway')}</div></div>`;
   }
   function drow(o){
     const total=o.sheets[0].total;
     const chips=o.sheets.map(s=>`<span class="dchip${s.claimedBy?' lk':''}${sel.has(s.path)?' on':''}" data-path="${s.path}" title="${total>1?'Take just this sheet':''}"><span class="dp">#${s.p}${total>1?'/'+total:''}</span><span class="di">${s.claimedBy?'🔒 '+s.claimedBy.machine:(s.inch||'—')}</span></span>${s.printedBy&&whoOrder(o).includes(',')?`<span class="dp" style="color:var(--ready)">✓ ${whoP(s.printedBy)}</span>`:''}${s.copies>1?cx(s.copies):''}`).join('');
     const loc=(searchMode&&o.loc)?`<span class="loc">📁 ${o.loc}</span>`:'';
     const md=`<span class="dmod">${o.modified?fmtDate(o.modified):'—'}</span>`;
-    return `<div class="row${o.allLocked?' locked':''}${selClass(o)}${o.urgent?' urgent':''}" data-code="${o.code}"><span class="dcheck">${selState(o)==='some'?'–':'✓'}</span><span class="dcode">${o.code}${o.urgent?'<span class="urg">URGENT</span>':''}${o.reprint?'<span class="urg rep">REPRINT</span>':''}</span><span class="dcust">${o.cust||'—'}${loc}${printedBadge(o,'loc')}</span>${md}<span class="dsheets">${chips}</span>${statusChip(o)}</div>`;
+    return `<div class="row${o.allLocked?' locked':''}${selClass(o)}${o.rush?' rush':o.urgent?' urgent':''}" data-code="${o.code}"><span class="dcheck">${selState(o)==='some'?'–':'✓'}</span><span class="dcode">${o.code}${o.rush?'<span class="urg rush">RUSH</span>':o.urgent?'<span class="urg">URGENT</span>':''}${o.reprint?'<span class="urg rep">REPRINT</span>':''}</span><span class="dcust" title="${(o.sheets[0].name||'').replace(/"/g,'&quot;')}">${o.label||o.cust||'—'}${loc}${printedBadge(o,'loc')}</span>${md}<span class="dsheets">${chips}</span>${statusChip(o)}</div>`;
   }
   const ftile=f=>`<button class="ftile" data-path="${f.path}">📁 <span class="fnm">${f.name}</span> <span class="far">›</span></button>`;
   function render(){
@@ -534,7 +548,13 @@
     curPath=path; sel.clear(); searchMode=false; setBreadcrumb(path);
     const grid=document.getElementById('grid'); grid.innerHTML='<div style="padding:34px;color:var(--faint);font-size:13px">Loading…</div>';
     let res; try{res=await api.list_folder(path);}catch(e){res={status:'error',message:e.message};}
-    if(!res||res.status!=='ok'){grid.innerHTML='<div style="padding:34px;color:#ef4444;font-size:13px">Error: '+((res&&res.message)||'listing failed')+'</div>';return;}
+    if(!res||res.status!=='ok'){
+      // network hiccup (TLS handshake timeout etc.): show the problem but keep trying,
+      // instead of leaving the operator with an empty screen
+      grid.innerHTML='<div style="padding:34px;color:#ef4444;font-size:13px">Connection problem: '+((res&&res.message)||'listing failed')+'<div style="color:var(--faint);margin-top:8px">Retrying automatically every 10 s…</div></div>';
+      setTimeout(()=>{ if(curPath===path && !searchMode) navigate(path); },10000);
+      return;
+    }
     SUBS=(res.entries||[]).filter(e=>e.type==='folder');
     const files=(res.entries||[]).filter(e=>e.type==='file'&&PRINTABLE.test(e.name));
     ORDERS=groupOrders(files);
@@ -604,13 +624,27 @@
     const fmtMB=b=>(b/1048576).toFixed(1)+' MB';
     const dl=document.getElementById('dlprog'),fill=document.getElementById('dlfill'),txt=document.getElementById('dltxt'),tgt=document.getElementById('target');
     tgt.hidden=true; dl.hidden=false; fill.style.width='2%'; txt.innerHTML='Starting…';
-    const poll=setInterval(async()=>{try{const p=await api.download_progress();if(!p.active)return;const pct=p.total?Math.round(p.done/p.total*100):0;const overall=p.count?((p.index-1)+(p.total?p.done/p.total:0))/p.count*100:0;fill.style.width=Math.max(2,overall)+'%';txt.innerHTML=`<b>${p.index} of ${p.count}</b> · ${(p.file||'').replace(/</g,'&lt;')} · ${p.total?fmtMB(p.done)+' / '+fmtMB(p.total)+' ('+pct+'%)':fmtMB(p.done)}`;}catch(e){}},250);
-    let res; try{res=await api.print_files(items);}catch(e){res={ok:[],failed:[{error:e.message}]};}
+    // The job runs in the background in Python; we only poll it, so a long batch never
+    // depends on one JS call staying alive.
+    const runJob=async(list)=>{
+      let st; try{st=await api.print_files(list);}catch(e){return {ok:[],failed:[{error:e.message}]};}
+      if(!st||st.status!=='started') return {ok:[],failed:[{error:st&&st.status==='busy'?'a download is already running':'could not start'}]};
+      for(;;){
+        await new Promise(r=>setTimeout(r,300));
+        let p; try{p=await api.download_progress();}catch(e){continue;}
+        const fin=p.finished||0, cnt=p.count||list.length;
+        const byBytes=p.total&&p.known===cnt, overall=byBytes?p.done/p.total*100:(fin+(p.total?Math.min(p.done/p.total,0.99):0))/cnt*100;
+        fill.style.width=Math.max(2,Math.min(100,overall))+'%';
+        txt.innerHTML=`<b>${fin} of ${cnt}</b> done · ${(p.file||'').replace(/</g,'&lt;')}${p.total?' · '+fmtMB(p.done)+' / '+fmtMB(p.total):''}`;
+        if(!p.active) return p.result||{ok:[],failed:[{error:'no result'}]};
+      }
+    };
+    let res=await runJob(items);
     const taken=(res.failed||[]).filter(f=>f.taken);
     if(taken.length){
       const q='Someone else just pressed Download for:\n\n'+taken.map(f=>'• '+(f.path||'').split('/').pop().slice(0,50)+'\n    '+f.error).join('\n')+'\n\nDownload here anyway? (it will be printed twice)';
       if(confirm(q)){ const again=taken.map(f=>({path:f.path,copies:(items.find(i=>i.path===f.path)||{}).copies||1,force:true}));
-        let r2; try{r2=await api.print_files(again);}catch(e){r2={ok:[],failed:[{error:e.message}]};}
+        const r2=await runJob(again);
         res={ok:[...(res.ok||[]),...(r2.ok||[])],failed:[...(res.failed||[]).filter(f=>!f.taken),...(r2.failed||[])]};
       } else res={ok:res.ok||[],failed:(res.failed||[]).filter(f=>!f.taken)};
     }
@@ -725,7 +759,7 @@
     else if(st==='rip'){const m=mins(it.ripped_at);flag=m>=STUCK.rip[1]?'late':m>=STUCK.rip[0]?'warn':'';const cp=copies>1?` · <span class="cp">${n} of ${copies}</span> printed`:'';msg=`RIP'd ${ago(it.ripped_at)} · `+(flag?'not printed':'waiting for oven')+cp+otMark(it.ot_ripped);}
     else {msg=`Printed ${clock(it.printed_at)} · <span class="cp">${it.printed_machine||it.machine||''}</span> · ${it.printed_operator||it.operator||''}`+(copies>1?` · <span class="cp">${copies} of ${copies}</span>`:'')+(it.manual?' · marked manually':'')+(it.extra_scans?` · reprint ×${it.extra_scans}`:'')+(it.moved_to?' · moved to BASILDI':it.move_error?` · <span style="color:var(--warn)" title="${String(it.move_error).replace(/"/g,'&quot;')}">⚠ not moved to BASILDI</span>`:'')+otMark(it.ot_printed);}
     const icon=st==='done'?'✓':st==='rip'?'◐':'○', chip=st==='done'?'Printed':st==='rip'?"RIP'd":'Downloaded';
-    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.urgent?'<span class="urg">URGENT</span>':''}${it.reprint?'<span class="urg rep">REPRINT</span>':''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><span class="qdone-slot">${st==='done'?'':`<button class="qdone" title="Printed but the camera did not read it — mark this sheet printed">✓ Printed</button>`}</span><button class="qmore" title="More">⋯</button></div>`;
+    return `<div class="qr ${st} ${flag}" data-id="${it.id}"><span class="qicon">${icon}</span><span class="qcode2">${it.code}${it.total>1?`<small>${it.part}/${it.total}</small>`:''}${it.rush?'<span class="urg rush">RUSH</span>':it.urgent?'<span class="urg">URGENT</span>':''}${it.reprint?'<span class="urg rep">REPRINT</span>':''}</span><span class="qmeta"><span title="${it.name}">${it.cust||it.name}</span>${it.inch?`<span class="in">${it.inch}</span>`:''}${copies>1?cx(copies):''}</span><span class="stagechip">${chip}</span><span class="qmsg">${msg}</span><span class="qdone-slot">${st==='done'?'':`<button class="qdone" title="Printed but the camera did not read it — mark this sheet printed">✓ Printed</button>`}</span><button class="qmore" title="More">⋯</button></div>`;
   }
   function renderQueue(){
     const list=document.getElementById('qlist'); if(!list)return;

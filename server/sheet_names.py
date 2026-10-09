@@ -15,7 +15,8 @@ _CODE_PLAIN = re.compile(r"\b([A-Za-z]{1,4}\d{3,})\b")
 _COPIES = re.compile(r"\((\d+)\s*[xX]\)")
 _PART = re.compile(r"\((\d+)\s*-\s*(\d+)\)|(?<![\w/])(\d+)\s*/\s*(\d+)(?![\w/])")
 _INCH = re.compile(r"-(\d+)\s*INCH", re.I)
-_URGENT = re.compile(r"^\s*\+\+")  # "++" at the very start of the name = priority order
+_URGENT = re.compile(r"^\s*\+\+(?!\+)")  # "++" at the very start of the name = priority order
+_RUSH = re.compile(r"^\s*\+\+\+")       # "+++" = RUSH: above urgent, printed before everything else
 _REPRINT = re.compile(r"reprint", re.I)  # "REPRINT" anywhere in the name = re-run of a printed sheet
 
 
@@ -39,7 +40,27 @@ def parse_sheet_name(name: str) -> dict:
     inch = (im.group(1) + '"') if im else ""
     return {"code": code, "part": part, "total": total, "copies": copies, "inch": inch,
             "cust": customer_of(name), "urgent": bool(_URGENT.match(name)),
-            "reprint": bool(_REPRINT.search(name))}
+            "rush": bool(_RUSH.match(name)), "reprint": bool(_REPRINT.search(name)),
+            "label": display_name(name)}
+
+
+def display_name(name: str) -> str:
+    """The file name minus the parts shown elsewhere (order code, (a-b) part, (Nx) copies,
+    -NNNINCH, +/++/+++ prefix, extension) — so any note someone typed into the name
+    ("5-1PX - … Bob", "REPRINT - …", "…LOCAL PICKUP") stays visible in the lists."""
+    s = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", name or "")
+    s = re.sub(r"^\s*\+{1,3}\s*", "", s)
+    m = _CODE_WITH_COPIES.search(s)
+    if m:
+        s = s[:m.start()] + " " + s[m.end():]
+    else:
+        s = _CODE_PLAIN.sub(" ", s, count=1)
+    s = re.sub(r"\(\d+\s*-\s*\d+\)", " ", s)
+    s = re.sub(r"\(\d+\)", " ", s)
+    s = re.sub(r"-?\s*\d+\s*INCH", " ", s, flags=re.I)
+    s = re.sub(r"(\s*[-–]\s*){2,}", " - ", s)      # "a -  - b" → "a - b"
+    s = re.sub(r"\s{2,}", " ", s).strip(" -–")
+    return s
 
 
 def customer_of(name: str) -> str:

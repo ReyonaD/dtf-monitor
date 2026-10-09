@@ -1151,7 +1151,8 @@ def _group_orders(entries):
         code = pf["code"] or e["name"]
         o = orders.setdefault(code, {"code": code, "cust": "", "sheets": [], "modified": None})
         o["sheets"].append({"part": pf["part"], "total": pf["total"], "inch": pf["inch"], "copies": pf["copies"],
-                            "urgent": pf["urgent"], "reprint": pf["reprint"], "name": e["name"], "path": e.get("path"),
+                            "urgent": pf["urgent"], "rush": pf["rush"], "reprint": pf["reprint"], "label": pf["label"],
+                            "name": e["name"], "path": e.get("path"),
                             "claimedBy": e.get("claimedBy"), "printedBy": e.get("printedBy"), "modified": e.get("modified")})
         if pf["cust"] and not o["cust"]:
             o["cust"] = pf["cust"]
@@ -1162,12 +1163,14 @@ def _group_orders(entries):
         o["sheets"].sort(key=lambda s: s["part"])
         o["total"] = max(s["total"] for s in o["sheets"])
         o["urgent"] = any(s["urgent"] for s in o["sheets"])
+        o["rush"] = any(s["rush"] for s in o["sheets"])
+        o["label"] = o["sheets"][0]["label"]
         o["reprint"] = any(s["reprint"] for s in o["sheets"])
         o["locked"] = sum(1 for s in o["sheets"] if s["claimedBy"])
         o["printed"] = sum(1 for s in o["sheets"] if s["printedBy"])
         o["inches"] = sum(int((s["inch"] or "0").rstrip('"') or 0) * s["copies"] for s in o["sheets"])
         out.append(o)
-    out.sort(key=lambda o: (not o["urgent"], o["modified"] or ""))
+    out.sort(key=lambda o: (not o["rush"], not o["urgent"], o["modified"] or ""))
     return out
 
 
@@ -1176,7 +1179,7 @@ def _folder_stats(path: str, fresh: bool = False) -> dict:
     orders = _group_orders(entries)
     return {"files": sum(len(o["sheets"]) for o in orders), "orders": len(orders),
             "inches": sum(o["inches"] for o in orders), "urgent": sum(1 for o in orders if o["urgent"]),
-            "locked": sum(o["locked"] for o in orders),
+            "rush": sum(1 for o in orders if o["rush"]), "locked": sum(o["locked"] for o in orders),
             "subfolders": [e["name"] for e in entries if e.get("type") == "folder"]}
 
 
@@ -1211,7 +1214,8 @@ def _overview_sync(fresh: bool) -> dict:
             stores.sort(key=lambda s: (-s["files"], s["name"].lower()))
             out.append({"name": c["name"], "path": c["path"], "stores": stores,
                         "files": sum(s["files"] for s in stores), "orders": sum(s["orders"] for s in stores),
-                        "inches": sum(s["inches"] for s in stores), "urgent": sum(s["urgent"] for s in stores)})
+                        "inches": sum(s["inches"] for s in stores), "urgent": sum(s["urgent"] for s in stores),
+                        "rush": sum(s["rush"] for s in stores)})
         out.sort(key=lambda c: c["name"].lower())
         return {"status": "ok", "root": root, "categories": out, "now": _q_now()}
 
@@ -1357,7 +1361,8 @@ def _q_report_ot(item: dict, stage: str):
     r = update_sheet(item["code"] or item["name"], item["part"], item["total"], item["copies"], stage,
                      item.get("printed_machine") or item["machine"],
                      item.get("printed_operator") or item.get("operator", ""),
-                     item["name"], item.get("printed_count"), bool(item.get("urgent")), bool(item.get("reprint")))
+                     item["name"], item.get("printed_count"), bool(item.get("urgent")), bool(item.get("reprint")),
+                     bool(item.get("rush")))
     queue_update(item["id"], **{"ot_" + stage: "ok" if r["ok"] else r["message"][:120]})
 
 

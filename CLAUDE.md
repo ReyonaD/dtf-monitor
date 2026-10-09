@@ -171,6 +171,27 @@ Replaces the tkinter `agent.py` (kept until rollout). One exe, three roles:
   (`PICASSO_M_1` test ≠ real `Picasso_M_1`). Never test with a real machine's exact name and a
   fresh id.
 
+## File-name flags & labels (2026-10-09)
+`sheet_names.parse_sheet_name` (JS twin `parseFile` in the agent UI): `+++` at the start =
+**rush** (above urgent; `urgent` is false then), `++` = urgent, `REPRINT` anywhere = reprint.
+`display_name()` / `displayName()` = the file name minus code, `(a-b)`, `(Nx)`, `-NNNINCH`, the
+`+` prefix and the extension — the agent's Print Files list, cards and `/files` show THIS
+(`label`) instead of the parsed customer, so notes typed into a file name stay visible.
+`sheet_queue.rush` column; queues sort rush → urgent → assigned_at; `_q_report_ot` sends
+`rush: true` to OT (`Order.rush`).
+
+## Agent networking (1.3.4)
+`core.get_json/post_json` retry transient network errors (URLError/socket/TLS handshake
+timeouts — the printer PCs drop handshakes now and then) 3× with 1–2 s backoff; HTTP errors
+(409 taken etc.) are never retried. `core.download()` reads 1 MB chunks into `<dest>.part`
+and **resumes with HTTP Range** on a drop (4 attempts) before giving up. `Api.print_files`
+starts a background thread and returns `{status:"started"}`; the UI polls
+`download_progress()` (aggregate bytes over all files, `finished`/`count`, `result` when
+done) — so a long batch never depends on one JS→Python call staying alive. Claims are taken
+sequentially (first machine wins), numbers (`36-- …`) assigned up front in selection order,
+then **3 downloads run in parallel**, each registered in the queue as soon as it lands.
+A failed listing keeps retrying every 10 s instead of leaving an empty screen.
+
 ## Phone view of Print Files — `/files` (2026-10-04)
 `server/static/files.html`, session-protected like `/queue` (log in once on the phone; the
 cookie lasts 30 days). Overview = every category → store folder with files / orders / inches /

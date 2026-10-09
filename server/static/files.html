@@ -50,7 +50,8 @@
   .badge.zero{background:var(--surface2);color:var(--faint);font-weight:500}
   .badge.red{background:var(--red-dim);color:var(--red)}
   .tag{display:inline-block;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.4px;vertical-align:middle}
-  .tag.u{background:var(--red);color:#fff}.tag.r{background:#2563eb;color:#fff}
+  .tag.u{background:var(--red);color:#fff}.tag.r{background:#2563eb;color:#fff}.tag.rush{background:#f97316;color:#111}
+  .order.rush{border-left-color:#f97316}
   .crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:2px 0 10px;flex-wrap:wrap}
   .crumb a{color:var(--accent);text-decoration:none}
   .sub{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -100,20 +101,20 @@
   }
   function orderCard(o,showFolder){
     const open=o.sheets.filter(s=>!s.printedBy).length;
-    return `<div class="order${o.urgent?' urg':''}${open===0?' done':''}">
-      <div class="oh"><span class="code">${esc(o.code)}</span>${o.urgent?'<span class="tag u">URGENT</span>':''}${o.reprint?'<span class="tag r">REPRINT</span>':''}<span class="right">${o.total>1?o.sheets.length+(o.sheets.length<o.total?' of '+o.total:'')+' sheets · ':''}${fmtN(o.inches)}"</span></div>
-      <div class="cust">${esc(o.cust||'—')}${showFolder&&o.folder?` <span class="fold">· 📁 ${esc(o.folder)}</span>`:''}${o.modified?` <span class="fold">· ${ago(o.modified)}</span>`:''}</div>
+    return `<div class="order${o.rush?' rush':o.urgent?' urg':''}${open===0?' done':''}">
+      <div class="oh"><span class="code">${esc(o.code)}</span>${o.rush?'<span class="tag rush">RUSH</span>':o.urgent?'<span class="tag u">URGENT</span>':''}${o.reprint?'<span class="tag r">REPRINT</span>':''}<span class="right">${o.total>1?o.sheets.length+(o.sheets.length<o.total?' of '+o.total:'')+' sheets · ':''}${fmtN(o.inches)}"</span></div>
+      <div class="cust" title="${esc(o.sheets[0].name)}">${esc(o.label||o.cust||'—')}${showFolder&&o.folder?` <span class="fold">· 📁 ${esc(o.folder)}</span>`:''}${o.modified?` <span class="fold">· ${ago(o.modified)}</span>`:''}</div>
       <div class="sheets">${o.sheets.map(sheetChip).join('')}</div></div>`;
   }
 
   function renderOverview(d){
-    const files=d.categories.reduce((a,c)=>a+c.files,0), orders=d.categories.reduce((a,c)=>a+c.orders,0), urgent=d.categories.reduce((a,c)=>a+c.urgent,0);
+    const files=d.categories.reduce((a,c)=>a+c.files,0), orders=d.categories.reduce((a,c)=>a+c.orders,0), urgent=d.categories.reduce((a,c)=>a+c.urgent+(c.rush||0),0);
     let h=`<div class="sum"><div class="k"><b>${fmtN(files)}</b><span>files waiting</span></div><div class="k"><b>${fmtN(orders)}</b><span>orders</span></div><div class="k${urgent?' u':''}"><b>${fmtN(urgent)}</b><span>urgent</span></div></div>`;
     for(const c of d.categories){
       const isOpen=OPEN.has(c.path)||(OPEN.size===0&&c.files>0&&c===d.categories.find(x=>x.files>0));
-      h+=`<section class="cat${isOpen?' open':''}" data-path="${esc(c.path)}"><div class="ch"><span class="nm">📁 ${esc(c.name)}</span>${c.urgent?`<span class="badge red" title="urgent orders">${c.urgent}</span>`:''}<span class="n">${fmtN(c.files)}<small>files</small></span><span class="n">${fmtN(c.orders)}<small>orders</small></span><span class="ar">›</span></div><div class="stores">`;
+      h+=`<section class="cat${isOpen?' open':''}" data-path="${esc(c.path)}"><div class="ch"><span class="nm">📁 ${esc(c.name)}</span>${c.rush?`<span class="badge" style="background:#f97316;color:#111" title="rush orders">${c.rush}</span>`:''}${c.urgent?`<span class="badge red" title="urgent orders">${c.urgent}</span>`:''}<span class="n">${fmtN(c.files)}<small>files</small></span><span class="n">${fmtN(c.orders)}<small>orders</small></span><span class="ar">›</span></div><div class="stores">`;
       for(const s of c.stores){
-        h+=`<div class="st${s.files?'':' zero'}" data-path="${esc(s.path)}" data-name="${esc(c.name+' / '+s.name)}"><span class="nm">${esc(s.name)}<small>${s.orders?fmtN(s.orders)+' orders · '+fmtN(s.inches)+'"':'empty'}${s.locked?' · 🔒 '+s.locked+' being printed':''}</small></span>${s.urgent?`<span class="badge red">${s.urgent}</span>`:''}<span class="badge${s.files?'':' zero'}">${s.files}</span></div>`;
+        h+=`<div class="st${s.files?'':' zero'}" data-path="${esc(s.path)}" data-name="${esc(c.name+' / '+s.name)}"><span class="nm">${esc(s.name)}<small>${s.orders?fmtN(s.orders)+' orders · '+fmtN(s.inches)+'"':'empty'}${s.locked?' · 🔒 '+s.locked+' being printed':''}</small></span>${s.rush?`<span class="badge" style="background:#f97316;color:#111">${s.rush}</span>`:''}${s.urgent?`<span class="badge red">${s.urgent}</span>`:''}<span class="badge${s.files?'':' zero'}">${s.files}</span></div>`;
       }
       h+=`</div></section>`;
     }
